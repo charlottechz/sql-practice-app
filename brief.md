@@ -1,4 +1,4 @@
-# Break Into Tech – SQL Playground Project Brief
+# Break Into Tech – SQL Pratice Playground - Project Brief
 
 ## Overview
 
