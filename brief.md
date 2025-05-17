@@ -12,7 +12,7 @@ The playground will be embedded into the Break Into Tech website via an iFrame a
 
 ---
 
-## 🧑‍💻 Intern Roles
+## 🧑‍💻 Roles
 
 ### 🎯 Himanshi Sheth – SQL Playground Developer
 **Title:** Software Engineer – SQL Playground Dev
