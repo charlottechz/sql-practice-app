@@ -19,4 +19,3 @@ Commercial use is prohibited. See [LICENSE.txt](./LICENSE.txt) for details.
 ### Contributors
 
 - **Himanshi Sheth** – SQL Playground Dev
-- **Kate Cai** – AI Coaching Layer & Integration Lead
