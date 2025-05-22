@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI SQL Playground</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/monokai.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/sql/sql.min.js"></script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen font-sans">
+  <!-- Header -->
+  <div class="bg-white shadow-sm border-b border-gray-200">
+    <div class="max-w-7xl mx-auto px-4 py-4">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+          <div class="bg-blue-600 text-white rounded-lg p-2">
+            <i class="fas fa-database text-xl"></i>
+          </div>
+          <div>
+            <h1 class="text-2xl font-bold text-gray-900">AI SQL Playground</h1>
+            <p class="text-sm text-gray-600">Generate datasets and query with natural language</p>
+          </div>
+        </div>
+        <button id="toggleSchema" class="lg:hidden bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-md transition-colors">
+          <i class="fas fa-bars"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="max-w-7xl mx-auto px-4 py-6">
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <!-- Schema Panel -->
+      <div id="schemaPanel" class="lg:col-span-1 schema-panel">
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          <!-- Dataset Generation -->
+          <div class="p-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+            <h3 class="font-semibold text-gray-900 mb-3 flex items-center">
+              <i class="fas fa-magic text-blue-600 mr-2"></i>
+              Generate Dataset
+            </h3>
+            <div class="space-y-3">
+              <textarea
+                id="datasetPrompt"
+                rows="3"
+                placeholder='Describe your data needs (e.g., "telecom customer data", "like Home Depot inventory", "hair salon appointments")'
+                class="w-full border border-gray-300 rounded-md p-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+              ></textarea>
+              <button
+                id="generateBtn"
+                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-md transition-colors flex items-center justify-center space-x-2"
+              >
+                <i class="fas fa-wand-magic-sparkles"></i>
+                <span>Generate Dataset</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Schema Overview -->
+          <div class="p-4">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="font-semibold text-gray-900 flex items-center">
+                <i class="fas fa-table text-green-600 mr-2"></i>
+                Schema Overview
+              </h3>
+              <button id="collapseSchema" class="text-gray-500 hover:text-gray-700">
+                <i class="fas fa-chevron-up"></i>
+              </button>
+            </div>
+            
+            <div id="schemaContent" class="space-y-3">
+              <!-- Sample schema - will be populated dynamically -->
+              <div class="border border-gray-200 rounded-lg overflow-hidden">
+                <div class="bg-gray-50 px-3 py-2 border-b border-gray-200 flex justify-between items-center">
+                  <span class="font-medium text-gray-800 text-sm">customers</span>
+                  <span class="text-xs text-gray-500 bg-gray-200 px-2 py-1 rounded">5 rows</span>
+                </div>
+                <div class="p-3 text-xs font-mono space-y-1">
+                  <div class="flex justify-between">
+                    <span class="text-gray-700">id</span>
+                    <span class="text-blue-600">INT PRIMARY KEY</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-gray-700">name</span>
+                    <span class="text-blue-600">VARCHAR(100)</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-gray-700">email</span>
+                    <span class="text-blue-600">VARCHAR(255)</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="border border-gray-200 rounded-lg overflow-hidden">
+                <div class="bg-gray-50 px-3 py-2 border-b border-gray-200 flex justify-between items-center">
+                  <span class="font-medium text-gray-800 text-sm">orders</span>
+                  <span class="text-xs text-gray-500 bg-gray-200 px-2 py-1 rounded">8 rows</span>
+                </div>
+                <div class="p-3 text-xs font-mono space-y-1">
+                  <div class="flex justify-between">
+                    <span class="text-gray-700">id</span>
+                    <span class="text-blue-600">INT PRIMARY KEY</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-gray-700">customer_id</span>
+                    <span class="text-blue-600">INT FOREIGN KEY</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-gray-700">total</span>
+                    <span class="text-blue-600">DECIMAL(10,2)</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="border border-gray-200 rounded-lg overflow-hidden">
+                <div class="bg-gray-50 px-3 py-2 border-b border-gray-200 flex justify-between items-center">
+                  <span class="font-medium text-gray-800 text-sm">products</span>
+                  <span class="text-xs text-gray-500 bg-gray-200 px-2 py-1 rounded">12 rows</span>
+                </div>
+                <div class="p-3 text-xs font-mono space-y-1">
+                  <div class="flex justify-between">
+                    <span class="text-gray-700">id</span>
+                    <span class="text-blue-600">INT PRIMARY KEY</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-gray-700">name</span>
+                    <span class="text-blue-600">VARCHAR(200)</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-gray-700">price</span>
+                    <span class="text-blue-600">DECIMAL(8,2)</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Content -->
+      <div class="lg:col-span-3 space-y-6">
+        <!-- SQL Query Editor -->
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+          <div class="p-4 border-b border-gray-200 bg-gradient-to-r from-green-50 to-emerald-50">
+            <h3 class="font-semibold text-gray-900 flex items-center">
+              <i class="fas fa-code text-green-600 mr-2"></i>
+              SQL Query Editor
+            </h3>
+          </div>
+          <div class="p-4">
+            <textarea id="sqlEditor" class="hidden">SELECT c.name, c.email, o.total, o.id as order_id
+FROM customers c
+JOIN orders o ON c.id = o.customer_id
+ORDER BY o.total DESC
+LIMIT 10;</textarea>
+            
+            <div class="flex flex-wrap gap-3 mt-4">
+              <button
+                id="runQueryBtn"
+                class="bg-green-600 hover:bg-green-700 text-white font-medium px-6 py-2 rounded-md transition-colors flex items-center space-x-2"
+              >
+                <i class="fas fa-play"></i>
+                <span>Run Query</span>
+              </button>
+              <button
+                id="formatBtn"
+                class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium px-4 py-2 rounded-md transition-colors flex items-center space-x-2"
+              >
+                <i class="fas fa-indent"></i>
+                <span>Format SQL</span>
+              </button>
+              <button
+                id="clearBtn"
+                class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium px-4 py-2 rounded-md transition-colors flex items-center space-x-2"
+              >
+                <i class="fas fa-trash"></i>
+                <span>Clear</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Error Panel -->
+        <div id="errorPanel" class="error-panel bg-red-50 border border-red-200 rounded-lg overflow-hidden">
+          <div class="p-4">
+            <div class="flex items-start space-x-3">
+              <i class="fas fa-exclamation-triangle text-red-600 mt-1"></i>
+              <div class="flex-1">
+                <h4 class="font-medium text-red-800">Query Error</h4>
+                <p class="text-sm text-red-700 mt-1" id="errorMessage">
+                  <!-- Error message will be inserted here -->
+                </p>
+                <div class="mt-2">
+                  <button id="dismissError" class="text-sm text-red-600 hover:text-red-800 underline">
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Query Results -->
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+          <div class="p-4 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-pink-50">
+            <div class="flex items-center justify-between">
+              <h3 class="font-semibold text-gray-900 flex items-center">
+                <i class="fas fa-table text-purple-600 mr-2"></i>
+                Query Results
+              </h3>
+              <div id="resultsInfo" class="text-sm text-gray-600">
+                <span id="rowCount">3 rows returned</span>
+                <span class="mx-2">•</span>
+                <span id="queryTime">0.02s</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="table-container">
+            <table id="resultsTable" class="w-full">
+              <thead class="bg-gray-50 border-b border-gray-200 sticky top-0">
+                <tr>
+                  <th class="px-4 py-3 text-left text-sm font-medium text-gray-900">id</th>
+                  <th class="px-4 py-3 text-left text-sm font-medium text-gray-900">name</th>
+                  <th class="px-4 py-3 text-left text-sm font-medium text-gray-900">email</th>
+                  <th class="px-4 py-3 text-left text-sm font-medium text-gray-900">total</th>
+                  <th class="px-4 py-3 text-left text-sm font-medium text-gray-900">order_id</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200">
+                <tr class="hover:bg-gray-50">
+                  <td class="px-4 py-3 text-sm text-gray-900">1</td>
+                  <td class="px-4 py-3 text-sm text-gray-900">John Smith</td>
+                  <td class="px-4 py-3 text-sm text-gray-600">john@example.com</td>
+                  <td class="px-4 py-3 text-sm text-gray-900 font-medium">$249.95</td>
+                  <td class="px-4 py-3 text-sm text-gray-600">1002</td>
+                </tr>
+                <tr class="hover:bg-gray-50">
+                  <td class="px-4 py-3 text-sm text-gray-900">1</td>
+                  <td class="px-4 py-3 text-sm text-gray-900">John Smith</td>
+                  <td class="px-4 py-3 text-sm text-gray-600">john@example.com</td>
+                  <td class="px-4 py-3 text-sm text-gray-900 font-medium">$129.99</td>
+                  <td class="px-4 py-3 text-sm text-gray-600">1001</td>
+                </tr>
+                <tr class="hover:bg-gray-50">
+                  <td class="px-4 py-3 text-sm text-gray-900">2</td>
+                  <td class="px-4 py-3 text-sm text-gray-900">Emma Johnson</td>
+                  <td class="px-4 py-3 text-sm text-gray-600">emma@example.com</td>
+                  <td class="px-4 py-3 text-sm text-gray-900 font-medium">$67.50</td>
+                  <td class="px-4 py-3 text-sm text-gray-600">1005</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          
+          <!-- Empty state -->
+          <div id="emptyResults" class="hidden p-8 text-center">
+            <i class="fas fa-search text-gray-400 text-3xl mb-3"></i>
+            <h4 class="text-lg font-medium text-gray-900 mb-2">No Results</h4>
+            <p class="text-gray-600">Run a query to see results here</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Load JavaScript at the end -->
+  <script src=""></script>
+</body>
+</html>
