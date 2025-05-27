@@ -38,6 +38,28 @@
       <!-- Schema Panel -->
       <div id="schemaPanel" class="lg:col-span-1 schema-panel">
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div class="p-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+                <h3 class="font-semibold text-gray-900 mb-3 flex items-center">
+                  <i class="fas fa-magic text-blue-600 mr-2"></i>
+                  Generate SQL Schema
+                </h3>
+                <div class="space-y-3">
+                  <textarea
+                    id="schemaPrompt"
+                    rows="3"
+                    placeholder='Describe your schema needs (e.g., "Generate a schema for a retail store with customers and orders")'
+                    class="w-full border border-gray-300 rounded-md p-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  ></textarea>
+                  <button
+                    id="generateSchemaBtn"
+                    class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-md transition-colors flex items-center justify-center space-x-2"
+                  >
+                    <i class="fas fa-database"></i>
+                    <span>Generate SQL Schema</span>
+                  </button>
+                </div>
+              </div>
+              
           <!-- Dataset Generation -->
           <div class="p-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
             <h3 class="font-semibold text-gray-900 mb-3 flex items-center">
@@ -154,10 +176,10 @@
           </div>
           <div class="p-4">
             <textarea id="sqlEditor" class="hidden">SELECT c.name, c.email, o.total, o.id as order_id
-FROM customers c
-JOIN orders o ON c.id = o.customer_id
-ORDER BY o.total DESC
-LIMIT 10;</textarea>
+                FROM customers c    
+                JOIN orders o ON c.id = o.customer_id
+                ORDER BY o.total DESC
+                LIMIT 10;</textarea>
             
             <div class="flex flex-wrap gap-3 mt-4">
               <button
