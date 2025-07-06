@@ -293,5 +293,73 @@
 
   <!-- Load JavaScript at the end -->
   <script src="script.js"></script>
+  <script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // Initialize CodeMirror
+    const sqlEditor = CodeMirror.fromTextArea(document.getElementById('sqlEditor'), {
+      mode: 'text/x-sql',
+      theme: 'monokai',
+      lineNumbers: true,
+      lineWrapping: true,
+      tabSize: 2
+    });
+    
+    // Add your other script.js content here
+    function showNotification(message, type) {
+      const notificationDiv = document.createElement('div');
+      notificationDiv.className = `fixed top-4 right-4 px-4 py-2 rounded-lg shadow-lg z-50 ${
+        type === 'success' ? 'bg-green-500 text-white' : 
+        type === 'error' ? 'bg-red-500 text-white' : 
+        'bg-blue-500 text-white'
+      }`;
+      
+      notificationDiv.textContent = message;
+      document.body.appendChild(notificationDiv);
+      
+      // Auto-remove notification after 3 seconds
+      setTimeout(() => {
+        notificationDiv.classList.add('opacity-0', 'transition-opacity', 'duration-300');
+        setTimeout(() => {
+          document.body.removeChild(notificationDiv);
+        }, 300);
+      }, 3000);
+    }
+    
+    document.getElementById('generateSchemaBtn').addEventListener('click', function() {
+      const prompt = document.getElementById('schemaPrompt').value;
+      if (prompt) {
+        generateSQLSchema(prompt);
+      }
+    });
+    
+    function generateSQLSchema(prompt) {
+      showNotification('Generating schema...', 'info');
+      
+      fetch('/generate-schema', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ prompt })
+      })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('API request failed');
+        }
+        return response.json();
+      })
+      .then(data => {
+        // Handle successful response
+        const schemaData = data.schema;
+        document.getElementById('schemaContent').innerHTML = '<pre>' + schemaData + '</pre>';
+        showNotification('Schema generated successfully!', 'success');
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        showNotification('Failed to generate schema', 'error');
+      });
+    }
+  });
+  </script>
 </body>
 </html>

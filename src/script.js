@@ -144,36 +144,51 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 });
 
-// Function to generate SQL schema and data
+// Function to generate SQL schema
 function generateSQLSchema(prompt) {
-  // Custom Claude prompt for generating SQL schema
-  const refinedPrompt = `
-    Generate SQL schema based on the following description:
-    "${prompt}"
+  // Show loading notification
+  showNotification('Generating schema...', 'info');
+  
+  // Call the Cloudflare Worker API 
+  fetch('https://sql-practice-app-worker.charlotteachaze.workers.dev/generate-schema', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ prompt })
+  })
+  .then(response => {
+    if (!response.ok) {
+      throw new Error('API request failed');
+    }
+    return response.json();
+  })
+  .then(data => {
+    // Use the schema returned from Claude
+    const schemaData = data.schema;
     
-    Requirements:
-    - Include at least 2 relational tables each containing at least 5 columns and at least 30 rows unless specified otherwise.
-    - The data should appear similar to what a real company or organization may collect and use internally.
-    - Include appropriate PRIMARY KEY and FOREIGN KEY constraints.
-    - Use realistic data types (VARCHAR, INT, DECIMAL, DATETIME, etc.).
-    - Insert realistic sample data that makes business sense.
-    - Ensure relationships between tables are properly established.
+    // Display the generated SQL in the SQL editor
+    sqlEditor.setValue(schemaData);
     
-    Please provide both CREATE TABLE statements and INSERT INTO statements.
-  `;
-  
-  console.log('Generating SQL schema with prompt:', refinedPrompt);
-  
-  // Mock response based on the prompt type
-  let mockResponse = generateMockSQLSchema(prompt);
-  
-  // Display the generated SQL in the SQL editor
-  sqlEditor.setValue(mockResponse);
-  
-  // Update schema display
-  updateSchemaDisplayFromSQL(mockResponse);
-  
-  showNotification('SQL schema generated successfully!', 'success');
+    // Update schema display
+    updateSchemaDisplayFromSQL(schemaData);
+    
+    showNotification('SQL schema generated successfully!', 'success');
+  })
+  .catch(error => {
+    console.error('API call failed, using fallback:', error);
+    
+    // Fallback to mock data if API call fails
+    let mockResponse = generateMockSQLSchema(prompt);
+    
+    // Display the generated SQL in the SQL editor
+    sqlEditor.setValue(mockResponse);
+    
+    // Update schema display
+    updateSchemaDisplayFromSQL(mockResponse);
+    
+    showNotification('Using mock data (API unavailable)', 'error');
+  });
 }
 
 // Generate mock SQL schema based on prompt context
