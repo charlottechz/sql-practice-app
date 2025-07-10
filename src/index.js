@@ -1,7 +1,7 @@
 function generateFallbackSchema(prompt) {
-  // Simple fallback schema for when the API is unavailable
-  return `-- Fallback SQL Schema for: ${prompt}
--- Note: This is a simplified schema created when the AI service is unavailable
+  // Simple fallback database for when the API is unavailable
+  return `-- Fallback SQL Database for: ${prompt}
+-- Note: This is a simplified database created when the AI service is unavailable
 
 CREATE TABLE customers (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -90,7 +90,7 @@ export default {
           console.error("Claude API key not found in environment variables");
           return new Response(JSON.stringify({ 
             error: "Claude API key not configured",
-            schema: generateFallbackSchema(prompt),
+            database: generateFallbackSchema(prompt),
             source: 'fallback'
           }), {
             status: 200,
@@ -120,16 +120,16 @@ export default {
               max_tokens: 2000,
               messages: [{
                 role: 'user',
-                content: `Generate a complete SQL schema based on this description: "${prompt}". 
+                content: `Generate a complete SQL database based on this description: "${prompt}". 
           
           Please include:
           1. CREATE TABLE statements with appropriate data types (use SQLite syntax - INTEGER, TEXT, REAL, BLOB)
           2. Primary keys using INTEGER PRIMARY KEY AUTOINCREMENT
           3. Foreign keys and constraints where appropriate
           4. Sample INSERT statements with realistic data (5-10 rows per table)
-          5. Comments explaining the schema design
+          5. Comments explaining the database design
           
-          Make sure the schema is production-ready with proper normalization and relationships. 
+          Make sure the database is production-ready with proper normalization and relationships. 
           Format the output as clean, executable SQLite SQL that can be run in sql.js.
           Use SQLite-compatible syntax only.`
               }]
@@ -173,10 +173,10 @@ export default {
             throw new Error("Invalid response structure from Claude API");
           }
           
-          const generatedSchema = claudeData.content[0].text;
+          const generatedDatabase = claudeData.content[0].text;
 
           return new Response(JSON.stringify({ 
-            schema: generatedSchema,
+            database: generatedDatabase,
             source: 'claude-api'
           }), {
             headers: {
@@ -188,9 +188,9 @@ export default {
         } catch (apiError) {
           console.error("Claude API call failed:", apiError);
           
-          // Return fallback schema if API fails
+          // Return fallback database if API fails
           return new Response(JSON.stringify({ 
-            schema: generateFallbackSchema(prompt),
+            database: generateFallbackSchema(prompt),
             source: 'fallback',
             error: `API call failed: ${apiError.message}`
           }), {
@@ -206,7 +206,7 @@ export default {
         console.error("Error handling request:", error);
         return new Response(JSON.stringify({ 
           error: error.message,
-          schema: generateFallbackSchema("default"),
+          database: generateFallbackSchema("default"),
           source: 'fallback'
         }), {
           status: 500,
@@ -411,21 +411,21 @@ export default {
           <div class="p-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
             <h3 class="font-semibold text-gray-900 mb-3 flex items-center">
               <i class="fas fa-magic text-blue-600 mr-2"></i>
-              Generate SQL Schema
+              Generate SQL Database
             </h3>
             <div class="space-y-3">
               <textarea
-                id="schemaPrompt"
+                id="databasePrompt"
                 rows="3"
-                placeholder="Describe your schema needs (e.g., 'Generate a schema for a retail store with customers and orders')"
+                placeholder="Describe your database needs (e.g., 'Generate a database for a retail store with customers and orders')"
                 class="w-full border border-gray-300 rounded-md p-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
               ></textarea>
               <button
-                id="generateSchemaBtn"
+                id="generateDatabaseBtn"
                 class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-md transition-colors flex items-center justify-center space-x-2"
               >
                 <i class="fas fa-database"></i>
-                <span>Generate & Load Schema</span>
+                <span>Generate & Load Database</span>
               </button>
             </div>
           </div>
@@ -435,24 +435,24 @@ export default {
             <div class="flex items-center justify-between mb-3">
               <h3 class="font-semibold text-gray-900 flex items-center">
                 <i class="fas fa-table text-green-600 mr-2"></i>
-                Schema Overview
+                Database Overview
               </h3>
               <div class="flex items-center space-x-2">
-                <button id="copySchemaBtn" class="text-gray-500 hover:text-gray-700 text-sm" title="Copy schema to clipboard" style="display: none;">
+                <button id="copyDatabaseBtn" class="text-gray-500 hover:text-gray-700 text-sm" title="Copy database to clipboard" style="display: none;">
                   <i class="fas fa-copy"></i>
                 </button>
-                <button id="loadToEditorBtn" class="text-gray-500 hover:text-gray-700 text-sm" title="Load schema to editor" style="display: none;">
+                <button id="loadToEditorBtn" class="text-gray-500 hover:text-gray-700 text-sm" title="Load database to editor" style="display: none;">
                   <i class="fas fa-edit"></i>
                 </button>
-                <button id="collapseSchema" class="text-gray-500 hover:text-gray-700">
+                <button id="collapseDatabase" class="text-gray-500 hover:text-gray-700">
                   <i class="fas fa-chevron-up"></i>
                 </button>
               </div>
             </div>
             
-            <div id="schemaContent" class="space-y-3">
+            <div id="databaseContent" class="space-y-3">
               <div class="text-sm text-gray-500 text-center py-4">
-                Generate a schema to see tables here
+                Generate a database to see tables here
               </div>
             </div>
           </div>
@@ -600,7 +600,7 @@ SELECT * FROM customers LIMIT 5;</textarea>
   let sqlEditor;
   let db = null; // SQLite database instance
   let debugInfo = [];
-  let currentSchema = null; // Store the current schema
+  let currentDatabase = null; // Store the current database
 
   // Add missing functions
   function addDebugInfo(message) {
@@ -764,9 +764,9 @@ SELECT * FROM customers LIMIT 5;</textarea>
   }
 
   // Function to extract table information from schema
-  function extractTableInfo(schema) {
+  function extractTableInfo(database) {
     const tables = [];
-    const lines = schema.split('\\n');
+    const lines = database.split('\\n');
     let currentTable = null;
     let inTableDefinition = false;
     
@@ -830,24 +830,24 @@ SELECT * FROM customers LIMIT 5;</textarea>
     return tables;
   }
 
-  // Function to display schema in the left panel
-  function displaySchemaInPanel(schema) {
-    const schemaContent = document.getElementById('schemaContent');
-    const copyBtn = document.getElementById('copySchemaBtn');
+  // Function to display database in the left panel
+  function displayDatabaseInPanel(database) {
+    const databaseContent = document.getElementById('databaseContent');
+    const copyBtn = document.getElementById('copyDatabaseBtn');
     const loadBtn = document.getElementById('loadToEditorBtn');
     
-    // Store the schema globally
-    currentSchema = schema;
+    // Store the database globally
+    currentDatabase = database;
     
     // Show action buttons
     copyBtn.style.display = 'inline-block';
     loadBtn.style.display = 'inline-block';
     
-    // Extract table information from schema
-    const tables = extractTableInfo(schema);
+    // Extract table information from database
+    const tables = extractTableInfo(database);
     
     if (tables.length === 0) {
-      schemaContent.innerHTML = '<div class="text-sm text-gray-500 text-center py-4">No tables found in schema</div>';
+      databaseContent.innerHTML = '<div class="text-sm text-gray-500 text-center py-4">No tables found in database</div>';
       return;
     }
     
@@ -887,55 +887,41 @@ SELECT * FROM customers LIMIT 5;</textarea>
       \`;
     });
     
-    schemaContent.innerHTML = html;
-  }
-
-  // Function to handle table selection for querying
-  function selectTableForQuery(tableName) {
-    const query = 'SELECT * FROM ' + tableName + ' LIMIT 10;';
-    sqlEditor.setValue(query);
-    updateStatus('Query template loaded for table "' + tableName + '". Click "Run Query" to execute.');
-  }
-
-  // Function to copy schema to clipboard
-  function copySchemaToClipboard() {
-    if (currentSchema) {
-      navigator.clipboard.writeText(currentSchema).then(() => {
-        updateStatus('Schema copied to clipboard!');
-      }).catch(err => {
-        showError('Failed to copy schema: ' + err.message);
-      });
-    }
-  }
-
-  // Function to load schema to editor
-  function loadSchemaToEditor() {
-    if (currentSchema) {
-      sqlEditor.setValue(currentSchema);
-      updateStatus('Schema loaded to editor. You can modify and re-run it.');
-    }
-  }
-
-  document.addEventListener('DOMContentLoaded', function() {
-    // Initialize SQL.js first
-    initializeSQLJS();
+    // Add a button to show the schema creation SQL (stretch goal implementation)
+    html += \`
+      <div class="mt-4 pt-4 border-t border-gray-200">
+        <button id="showSchemaBtn" class="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium px-4 py-2 rounded-md transition-colors flex items-center justify-center space-x-2">
+          <i class="fas fa-code"></i>
+          <span>Show me how this schema was created using SQL</span>
+        </button>
+      </div>
+    \`;
     
-    // Initialize CodeMirror
-    sqlEditor = CodeMirror.fromTextArea(document.getElementById('sqlEditor'), {
-      mode: 'text/x-sql',
-      theme: 'monokai',
-      lineNumbers: true,
-      lineWrapping: true,
-      tabSize: 2,
-      indentUnit: 2,
-      smartIndent: true
+    databaseContent.innerHTML = html;
+    
+    // Add event listener for the new button
+    document.getElementById('showSchemaBtn').addEventListener('click', function() {
+      if (currentDatabase) {
+        sqlEditor.setValue(currentDatabase);
+        updateStatus('Schema creation SQL loaded to editor. You can see how the database was built!');
+        
+        // Temporarily change button text to show action was performed
+        const originalHTML = this.innerHTML;
+        this.innerHTML = '<i class="fas fa-check"></i><span>Schema SQL loaded to editor</span>';
+        this.classList.remove('bg-gray-100', 'hover:bg-gray-200');
+        this.classList.add('bg-green-100', 'text-green-700');
+        
+        // Reset button back to original state after 2 seconds
+        setTimeout(() => {
+          this.innerHTML = originalHTML;
+          this.classList.remove('bg-green-100', 'text-green-700');
+          this.classList.add('bg-gray-100', 'hover:bg-gray-200');
+        }, 2000);
+      }
     });
-    
-    // Setup event listeners
-    setupEventListeners();
-  });
+  }
 
-  // Initialize SQL.js database
+  // Initialize SQL.js first
   async function initializeSQLJS() {
     try {
       addDebugInfo('Initializing SQL.js...');
@@ -951,7 +937,7 @@ SELECT * FROM customers LIMIT 5;</textarea>
       
       addDebugInfo('SQL.js initialized successfully');
       updateDatabaseStatus('connected');
-      updateStatus('SQLite database ready. Generate a schema to get started.');
+      updateStatus('SQLite database ready. Generate a database to get started.');
       
     } catch (error) {
       addDebugInfo('Failed to initialize SQL.js: ' + error.message);
@@ -1001,24 +987,24 @@ SELECT * FROM customers LIMIT 5;</textarea>
       document.getElementById('resultsPanel').classList.remove('show');
     });
     
-    // Generate Schema Button Handler
-    document.getElementById('generateSchemaBtn').addEventListener('click', generateAndLoadSchema);
+    // Generate Database Button Handler
+    document.getElementById('generateDatabaseBtn').addEventListener('click', generateAndLoadDatabase);
 
     // SQL Editor buttons
     document.getElementById('runQueryBtn').addEventListener('click', executeQuery);
     document.getElementById('formatBtn').addEventListener('click', formatSQL);
     document.getElementById('clearBtn').addEventListener('click', clearEditor);
 
-    // Schema panel buttons
-    document.getElementById('copySchemaBtn').addEventListener('click', copySchemaToClipboard);
-    document.getElementById('loadToEditorBtn').addEventListener('click', loadSchemaToEditor);
+    // Database panel buttons
+    document.getElementById('copyDatabaseBtn').addEventListener('click', copyDatabaseToClipboard);
+    document.getElementById('loadToEditorBtn').addEventListener('click', loadDatabaseToEditor);
 
     // Error handling
     document.getElementById('dismissError').addEventListener('click', hideError);
 
-    // Schema panel controls
-    document.getElementById('collapseSchema').addEventListener('click', function() {
-      const content = document.getElementById('schemaContent');
+    // Database panel controls
+    document.getElementById('collapseDatabase').addEventListener('click', function() {
+      const content = document.getElementById('databaseContent');
       const icon = this.querySelector('i');
       
       if (content.style.display === 'none') {
@@ -1037,12 +1023,12 @@ SELECT * FROM customers LIMIT 5;</textarea>
     });
   }
 
-  // Generate schema and load it into the database
-  async function generateAndLoadSchema() {
+  // Generate database and load it into the database
+  async function generateAndLoadDatabase() {
     try {
-      const prompt = document.getElementById('schemaPrompt').value.trim();
+      const prompt = document.getElementById('databasePrompt').value.trim();
       if (!prompt) {
-        showError('Please enter a schema description first.');
+        showError('Please enter a database description first.');
         return;
       }
 
@@ -1051,15 +1037,15 @@ SELECT * FROM customers LIMIT 5;</textarea>
         return;
       }
 
-      addDebugInfo("Starting schema generation for: " + prompt);
+      addDebugInfo("Starting database generation for: " + prompt);
 
       // Show loading state
-      const btn = document.getElementById('generateSchemaBtn');
+      const btn = document.getElementById('generateDatabaseBtn');
       const originalHTML = btn.innerHTML;
       btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Generating...</span>';
       btn.disabled = true;
 
-      updateStatus('Generating SQL schema...');
+      updateStatus('Generating SQL database...');
       updateDatabaseStatus('loading');
 
       try {
@@ -1082,42 +1068,49 @@ SELECT * FROM customers LIMIT 5;</textarea>
           addDebugInfo("API Error: " + data.error);
         }
 
-        if (data.schema) {
-          // Clean the schema before processing
-          const cleanedSchema = cleanGeneratedSchema(data.schema);
-          addDebugInfo('Schema cleaned and ready for loading');
+        if (data.database) {
+          // Clean the database before processing
+          const cleanedDatabase = cleanGeneratedDatabase(data.database);
+          addDebugInfo('Database cleaned and ready for loading');
           
-          await loadSchemaIntoDatabase(cleanedSchema);
+          await loadDatabaseIntoDatabase(cleanedDatabase);
           
-          // Display schema in the left panel
-          displaySchemaInPanel(cleanedSchema);
+          // Display database in the left panel
+          displayDatabaseInPanel(cleanedDatabase);
           
-          // Also update the editor with the cleaned schema
-          sqlEditor.setValue(cleanedSchema);
+          // Set a clean query editor with helpful comments instead of showing the schema SQL
+          sqlEditor.setValue(\`-- Write your SQL queries here
+-- Example: SELECT * FROM customers LIMIT 5;
+-- Try these common queries:
+--   SELECT COUNT(*) FROM table_name;
+--   SELECT * FROM table_name WHERE condition;
+--   SELECT column1, column2 FROM table_name ORDER BY column1;
+
+\`);
 
           if (data.source === 'claude-api') {
-            updateStatus('SQL schema generated and loaded successfully using Claude AI');
-            addDebugInfo('Successfully used Claude API and loaded schema into database');
+            updateStatus('SQL database generated and loaded successfully using Claude AI');
+            addDebugInfo('Successfully used Claude API and loaded database into database');
           } else {
-            updateStatus('Using mock schema and loaded into database (Claude API unavailable)');
-            addDebugInfo('Used fallback schema and loaded into database');
+            updateStatus('Using mock database and loaded into database (Claude API unavailable)');
+            addDebugInfo('Used fallback database and loaded into database');
           }
 
           updateDatabaseStatus('connected');
         } else {
-          throw new Error(data.error || 'Failed to generate schema');
+          throw new Error(data.error || 'Failed to generate database');
         }
       } catch (error) {
         console.error('Error:', error);
         addDebugInfo("Error occurred: " + error.message);
-        showError('Failed to generate schema: ' + error.message);
-        updateStatus('Schema generation failed');
+        showError('Failed to generate database: ' + error.message);
+        updateStatus('Database generation failed');
         updateDatabaseStatus('error');
       } finally {
         // Reset button
         btn.innerHTML = originalHTML;
         btn.disabled = false;
-        addDebugInfo('Schema generation process completed');
+        addDebugInfo('Database generation process completed');
       }
     } catch (error) {
       console.error('Unexpected error:', error);
@@ -1125,13 +1118,38 @@ SELECT * FROM customers LIMIT 5;</textarea>
     }
   }
 
-  // Add this new function to clean generated schema
-  function cleanGeneratedSchema(schema) {
-    // Remove markdown code blocks and clean up the schema
-    let cleaned = schema
+  // Add missing helper functions
+  function copyDatabaseToClipboard() {
+    if (currentDatabase) {
+      navigator.clipboard.writeText(currentDatabase).then(() => {
+        updateStatus('Database SQL copied to clipboard!');
+      }).catch(err => {
+        showError('Failed to copy to clipboard: ' + err.message);
+      });
+    }
+  }
+
+  function loadDatabaseToEditor() {
+    if (currentDatabase) {
+      sqlEditor.setValue(currentDatabase);
+      updateStatus('Database SQL loaded to editor');
+    }
+  }
+
+  function selectTableForQuery(tableName) {
+    const sampleQuery = \`-- Querying the \${tableName} table
+SELECT * FROM \${tableName} LIMIT 10;\`;
+    sqlEditor.setValue(sampleQuery);
+    updateStatus(\`Sample query for \${tableName} loaded. You can modify and run it!\`);
+  }
+
+  // Add this new function to clean generated database
+  function cleanGeneratedDatabase(database) {
+    // Remove markdown code blocks and clean up the database
+    let cleaned = database
       // Remove markdown code block markers
-      .replace(/\\\`\\\`\\\`sql\\s*/gi, '')
-      .replace(/\\\`\\\`\\\`\\s*/g, '')
+      .replace(/\`\`\`sql\\s*/gi, '')
+      .replace(/\`\`\`\\s*/g, '')
       // Remove any leading/trailing whitespace
       .trim();
     
@@ -1166,19 +1184,19 @@ SELECT * FROM customers LIMIT 5;</textarea>
     }
     
     const result = sqlLines.join('\\n').trim();
-    addDebugInfo("Original schema length: " + schema.length + ", Cleaned length: " + result.length);
+    addDebugInfo("Original database length: " + database.length + ", Cleaned length: " + result.length);
     
     return result;
   }
 
-  // Update the loadSchemaIntoDatabase function with better SQL parsing
-  async function loadSchemaIntoDatabase(schemaSQL) {
+  // Update the loadDatabaseIntoDatabase function with better SQL parsing
+  async function loadDatabaseIntoDatabase(databaseSQL) {
     if (!db) {
       throw new Error('Database not initialized');
     }
 
     try {
-      addDebugInfo('Loading schema into database...');
+      addDebugInfo('Loading database into database...');
       updateDatabaseStatus('loading');
       
       // Clear existing data first
@@ -1195,8 +1213,8 @@ SELECT * FROM customers LIMIT 5;</textarea>
       }
       
       // Improved SQL statement parsing
-      const statements = parseSQL(schemaSQL);
-      addDebugInfo("Parsed " + statements.length + " SQL statements from schema");
+      const statements = parseSQL(databaseSQL);
+      addDebugInfo("Parsed " + statements.length + " SQL statements from database");
       
       let successCount = 0;
       let errorCount = 0;
@@ -1218,7 +1236,7 @@ SELECT * FROM customers LIMIT 5;</textarea>
         }
       }
       
-      addDebugInfo("Schema loading completed: " + successCount + " statements succeeded, " + errorCount + " failed");
+      addDebugInfo("Database loading completed: " + successCount + " statements succeeded, " + errorCount + " failed");
       
       // Verify tables were created
       const result = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';");
@@ -1250,8 +1268,8 @@ SELECT * FROM customers LIMIT 5;</textarea>
       }
       
     } catch (error) {
-      addDebugInfo("Error loading schema: " + error.message);
-      console.error("Schema loading error:", error);
+      addDebugInfo("Error loading database: " + error.message);
+      console.error("Database loading error:", error);
       updateDatabaseStatus('error');
       throw error;
     }
@@ -1317,6 +1335,36 @@ SELECT * FROM customers LIMIT 5;</textarea>
              cleaned.match(/^(CREATE|INSERT|UPDATE|DELETE|DROP|ALTER)/i);
     });
   }
+
+  // Initialize everything when the page loads
+  document.addEventListener('DOMContentLoaded', function() {
+    // Initialize SQL.js first
+    initializeSQLJS();
+    
+    // Initialize CodeMirror
+    sqlEditor = CodeMirror.fromTextArea(document.getElementById('sqlEditor'), {
+      mode: 'text/x-sql',
+      theme: 'monokai',
+      lineNumbers: true,
+      lineWrapping: true,
+      tabSize: 2,
+      indentUnit: 2,
+      smartIndent: true
+    });
+    
+    // Set initial helpful content
+    sqlEditor.setValue(\`-- Write your SQL queries here
+-- Example: SELECT * FROM customers LIMIT 5;
+-- Try these common queries:
+--   SELECT COUNT(*) FROM table_name;
+--   SELECT * FROM table_name WHERE condition;
+--   SELECT column1, column2 FROM table_name ORDER BY column1;
+
+\`);
+    
+    // Setup event listeners
+    setupEventListeners();
+  });
   </script>
 </body>
 </html>`;
