@@ -248,6 +248,30 @@ export default {
       border-radius: 0.375rem;
       font-size: 14px;
     }
+    .schema-display {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 0.375rem;
+      padding: 1rem;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      line-height: 1.5;
+      max-height: 400px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    .schema-display .sql-keyword {
+      color: #1e40af;
+      font-weight: bold;
+    }
+    .schema-display .sql-comment {
+      color: #6b7280;
+      font-style: italic;
+    }
+    .schema-display .sql-string {
+      color: #059669;
+    }
     .table-container {
       max-height: 400px;
       overflow-y: auto;
@@ -292,6 +316,59 @@ export default {
     .db-status.disconnected {
       background-color: #fee2e2;
       color: #991b1b;
+    }
+    .table-info {
+      background: #f0f9ff;
+      border: 1px solid #0ea5e9;
+      border-radius: 0.375rem;
+      padding: 0.75rem;
+      margin-bottom: 0.5rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .table-info:hover {
+      background: #e0f2fe;
+      border-color: #0284c7;
+    }
+    .table-info h4 {
+      color: #0c4a6e;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: between;
+    }
+    .column-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.25rem;
+      margin-bottom: 0.5rem;
+    }
+    .column-tag {
+      background: #e0f2fe;
+      color: #0c4a6e;
+      padding: 0.125rem 0.5rem;
+      border-radius: 0.25rem;
+      font-size: 0.75rem;
+      font-family: monospace;
+    }
+    .row-count {
+      font-size: 0.75rem;
+      color: #6b7280;
+      font-style: italic;
+    }
+    .query-btn {
+      background: #3b82f6;
+      color: white;
+      padding: 0.25rem 0.5rem;
+      border-radius: 0.25rem;
+      font-size: 0.75rem;
+      border: none;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+    .query-btn:hover {
+      background: #2563eb;
     }
   </style>
 </head>
@@ -360,9 +437,17 @@ export default {
                 <i class="fas fa-table text-green-600 mr-2"></i>
                 Schema Overview
               </h3>
-              <button id="collapseSchema" class="text-gray-500 hover:text-gray-700">
-                <i class="fas fa-chevron-up"></i>
-              </button>
+              <div class="flex items-center space-x-2">
+                <button id="copySchemaBtn" class="text-gray-500 hover:text-gray-700 text-sm" title="Copy schema to clipboard" style="display: none;">
+                  <i class="fas fa-copy"></i>
+                </button>
+                <button id="loadToEditorBtn" class="text-gray-500 hover:text-gray-700 text-sm" title="Load schema to editor" style="display: none;">
+                  <i class="fas fa-edit"></i>
+                </button>
+                <button id="collapseSchema" class="text-gray-500 hover:text-gray-700">
+                  <i class="fas fa-chevron-up"></i>
+                </button>
+              </div>
             </div>
             
             <div id="schemaContent" class="space-y-3">
@@ -403,9 +488,8 @@ export default {
             </h3>
           </div>
           <div class="p-4">
-            <textarea id="sqlEditor" class="hidden">-- Your generated SQL schema will appear here
--- Try generating a schema first using the panel on the left
--- Then write SELECT queries to test your data
+            <textarea id="sqlEditor" class="hidden">-- Write your SQL queries here
+-- Example: SELECT * FROM customers LIMIT 5;
 
 SELECT * FROM customers LIMIT 5;</textarea>
             
@@ -430,13 +514,6 @@ SELECT * FROM customers LIMIT 5;</textarea>
               >
                 <i class="fas fa-trash"></i>
                 <span>Clear</span>
-              </button>
-              <button
-                id="loadSchemaBtn"
-                class="bg-blue-100 hover:bg-blue-200 text-blue-700 font-medium px-4 py-2 rounded-md transition-colors flex items-center space-x-2"
-              >
-                <i class="fas fa-upload"></i>
-                <span>Load Schema to DB</span>
               </button>
             </div>
           </div>
@@ -523,6 +600,321 @@ SELECT * FROM customers LIMIT 5;</textarea>
   let sqlEditor;
   let db = null; // SQLite database instance
   let debugInfo = [];
+  let currentSchema = null; // Store the current schema
+
+  // Add missing functions
+  function addDebugInfo(message) {
+    const timestamp = new Date().toLocaleTimeString();
+    debugInfo.push('[' + timestamp + '] ' + message);
+    
+    const debugContent = document.getElementById('debugContent');
+    if (debugContent) {
+      debugContent.innerHTML = debugInfo.slice(-20).join('\\n'); // Show last 20 messages
+      debugContent.scrollTop = debugContent.scrollHeight;
+    }
+  }
+
+  function updateStatus(message) {
+    const statusContent = document.getElementById('statusContent');
+    if (statusContent) {
+      statusContent.textContent = message;
+    }
+  }
+
+  function showError(message) {
+    const errorPanel = document.getElementById('errorPanel');
+    const errorMessage = document.getElementById('errorMessage');
+    
+    if (errorMessage) {
+      errorMessage.textContent = message;
+    }
+    if (errorPanel) {
+      errorPanel.classList.add('show');
+    }
+  }
+
+  function hideError() {
+    const errorPanel = document.getElementById('errorPanel');
+    if (errorPanel) {
+      errorPanel.classList.remove('show');
+    }
+  }
+
+  function executeQuery() {
+    const query = sqlEditor.getValue().trim();
+    if (!query) {
+      showError('Please enter a SQL query first.');
+      return;
+    }
+
+    if (!db) {
+      showError('Database not initialized. Please refresh the page.');
+      return;
+    }
+
+    const btn = document.getElementById('runQueryBtn');
+    const originalHTML = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Running...</span>';
+    btn.disabled = true;
+
+    hideError();
+    const startTime = performance.now();
+
+    try {
+      addDebugInfo('Executing query: ' + query);
+      
+      const results = db.exec(query);
+      const endTime = performance.now();
+      const executionTime = Math.round(endTime - startTime);
+
+      addDebugInfo('Query executed in ' + executionTime + 'ms');
+      
+      if (results.length === 0) {
+        displayEmptyResults(executionTime);
+        updateStatus('Query executed successfully in ' + executionTime + 'ms (no results returned)');
+        addDebugInfo('Query executed successfully but returned no rows');
+      } else {
+        addDebugInfo('Query returned ' + results[0].values.length + ' rows with columns: ' + results[0].columns.join(', '));
+        displayQueryResults(results[0], executionTime);
+      }
+
+    } catch (error) {
+      console.error("SQL Query Error:", error);
+      addDebugInfo('Query error: ' + error.message);
+      showError('SQL Error: ' + error.message);
+      updateStatus('Query execution failed');
+    } finally {
+      btn.innerHTML = originalHTML;
+      btn.disabled = false;
+    }
+  }
+
+  function displayQueryResults(result, executionTime) {
+    const resultsPanel = document.getElementById('resultsPanel');
+    const resultsHeader = document.getElementById('resultsHeader');
+    const resultsBody = document.getElementById('resultsBody');
+    const rowCount = document.getElementById('rowCount');
+    const queryTime = document.getElementById('queryTime');
+    const emptyResults = document.getElementById('emptyResults');
+
+    // Clear previous results
+    resultsHeader.innerHTML = '';
+    resultsBody.innerHTML = '';
+    emptyResults.style.display = 'none';
+
+    // Show panel
+    resultsPanel.classList.add('show');
+
+    // Update stats
+    rowCount.textContent = result.values.length + ' rows';
+    queryTime.textContent = executionTime + 'ms';
+
+    // Create headers
+    result.columns.forEach(column => {
+      const th = document.createElement('th');
+      th.className = 'px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider';
+      th.textContent = column;
+      resultsHeader.appendChild(th);
+    });
+
+    // Create rows
+    result.values.forEach(row => {
+      const tr = document.createElement('tr');
+      row.forEach(cell => {
+        const td = document.createElement('td');
+        td.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-900';
+        td.textContent = cell !== null ? cell : 'NULL';
+        tr.appendChild(td);
+      });
+      resultsBody.appendChild(tr);
+    });
+  }
+
+  function displayEmptyResults(executionTime) {
+    const resultsPanel = document.getElementById('resultsPanel');
+    const emptyResults = document.getElementById('emptyResults');
+    const rowCount = document.getElementById('rowCount');
+    const queryTime = document.getElementById('queryTime');
+
+    // Show panel
+    resultsPanel.classList.add('show');
+    emptyResults.style.display = 'block';
+
+    // Update stats
+    rowCount.textContent = '0 rows';
+    queryTime.textContent = executionTime + 'ms';
+
+    // Hide table
+    document.getElementById('resultsTable').style.display = 'none';
+  }
+
+  function formatSQL() {
+    // Simple SQL formatting
+    const value = sqlEditor.getValue();
+    const formatted = value
+      .replace(/\\b(SELECT|FROM|WHERE|JOIN|LEFT JOIN|RIGHT JOIN|INNER JOIN|ORDER BY|GROUP BY|HAVING|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER)\\b/gi, '\\n$1')
+      .replace(/,/g, ',\\n  ')
+      .replace(/\\s+/g, ' ')
+      .trim();
+    sqlEditor.setValue(formatted);
+  }
+
+  function clearEditor() {
+    sqlEditor.setValue('');
+  }
+
+  // Function to extract table information from schema
+  function extractTableInfo(schema) {
+    const tables = [];
+    const lines = schema.split('\\n');
+    let currentTable = null;
+    let inTableDefinition = false;
+    
+    for (let line of lines) {
+      const trimmedLine = line.trim();
+      
+      // Check for CREATE TABLE statement
+      const createTableMatch = trimmedLine.match(/CREATE TABLE\\s+(\\w+)/i);
+      if (createTableMatch) {
+        if (currentTable) {
+          tables.push(currentTable);
+        }
+        currentTable = {
+          name: createTableMatch[1],
+          columns: []
+        };
+        inTableDefinition = true;
+        continue;
+      }
+      
+      // Check for end of table definition
+      if (inTableDefinition && trimmedLine.includes(');')) {
+        inTableDefinition = false;
+        if (currentTable) {
+          tables.push(currentTable);
+          currentTable = null;
+        }
+        continue;
+      }
+      
+      // Parse column definitions
+      if (inTableDefinition && currentTable && trimmedLine && !trimmedLine.startsWith('--')) {
+        // Skip FOREIGN KEY constraints and other non-column lines
+        if (trimmedLine.toUpperCase().startsWith('FOREIGN KEY') || 
+            trimmedLine.toUpperCase().startsWith('CONSTRAINT') ||
+            trimmedLine.toUpperCase().startsWith('PRIMARY KEY') ||
+            trimmedLine.toUpperCase().startsWith('UNIQUE') ||
+            trimmedLine.toUpperCase().startsWith('CHECK')) {
+          continue;
+        }
+        
+        // Parse column definition
+        const columnMatch = trimmedLine.match(/(\\w+)\\s+([\\w\\s\\(\\),]+?)(?:,|$)/i);
+        if (columnMatch) {
+          let columnName = columnMatch[1];
+          let columnType = columnMatch[2].replace(/,$/, '').trim();
+          
+          // Clean up the type (remove constraints like NOT NULL, PRIMARY KEY, etc.)
+          columnType = columnType.split(/\\s+/)[0];
+          
+          currentTable.columns.push(columnName + ' (' + columnType + ')');
+        }
+      }
+    }
+    
+    // Don't forget the last table
+    if (currentTable) {
+      tables.push(currentTable);
+    }
+    
+    return tables;
+  }
+
+  // Function to display schema in the left panel
+  function displaySchemaInPanel(schema) {
+    const schemaContent = document.getElementById('schemaContent');
+    const copyBtn = document.getElementById('copySchemaBtn');
+    const loadBtn = document.getElementById('loadToEditorBtn');
+    
+    // Store the schema globally
+    currentSchema = schema;
+    
+    // Show action buttons
+    copyBtn.style.display = 'inline-block';
+    loadBtn.style.display = 'inline-block';
+    
+    // Extract table information from schema
+    const tables = extractTableInfo(schema);
+    
+    if (tables.length === 0) {
+      schemaContent.innerHTML = '<div class="text-sm text-gray-500 text-center py-4">No tables found in schema</div>';
+      return;
+    }
+    
+    // Display table information with row counts
+    let html = '';
+    tables.forEach(table => {
+      // Get row count from database if available
+      let rowCount = 'Unknown';
+      if (db) {
+        try {
+          const result = db.exec('SELECT COUNT(*) as count FROM ' + table.name);
+          if (result.length > 0) {
+            rowCount = result[0].values[0][0];
+          }
+        } catch (e) {
+          rowCount = '0';
+        }
+      }
+      
+      html += \`
+        <div class="table-info" onclick="selectTableForQuery('\${table.name}')">
+          <h4>
+            <i class="fas fa-table mr-2"></i>
+            \${table.name}
+            <button class="query-btn ml-auto" onclick="event.stopPropagation(); selectTableForQuery('\${table.name}')">
+              <i class="fas fa-arrow-right mr-1"></i>Query
+            </button>
+          </h4>
+          <div class="column-list">
+            \${table.columns.map(col => \`<span class="column-tag">\${col}</span>\`).join('')}
+          </div>
+          <div class="row-count">
+            <i class="fas fa-database mr-1"></i>
+            \${rowCount} rows
+          </div>
+        </div>
+      \`;
+    });
+    
+    schemaContent.innerHTML = html;
+  }
+
+  // Function to handle table selection for querying
+  function selectTableForQuery(tableName) {
+    const query = 'SELECT * FROM ' + tableName + ' LIMIT 10;';
+    sqlEditor.setValue(query);
+    updateStatus('Query template loaded for table "' + tableName + '". Click "Run Query" to execute.');
+  }
+
+  // Function to copy schema to clipboard
+  function copySchemaToClipboard() {
+    if (currentSchema) {
+      navigator.clipboard.writeText(currentSchema).then(() => {
+        updateStatus('Schema copied to clipboard!');
+      }).catch(err => {
+        showError('Failed to copy schema: ' + err.message);
+      });
+    }
+  }
+
+  // Function to load schema to editor
+  function loadSchemaToEditor() {
+    if (currentSchema) {
+      sqlEditor.setValue(currentSchema);
+      updateStatus('Schema loaded to editor. You can modify and re-run it.');
+    }
+  }
 
   document.addEventListener('DOMContentLoaded', function() {
     // Initialize SQL.js first
@@ -551,7 +943,7 @@ SELECT * FROM customers LIMIT 5;</textarea>
       
       // Load SQL.js WASM
       const SQL = await initSqlJs({
-        locateFile: file => \`https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/\${file}\`
+        locateFile: file => 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/' + file
       });
       
       // Create a new database
@@ -562,7 +954,7 @@ SELECT * FROM customers LIMIT 5;</textarea>
       updateStatus('SQLite database ready. Generate a schema to get started.');
       
     } catch (error) {
-      addDebugInfo(\`Failed to initialize SQL.js: \${error.message}\`);
+      addDebugInfo('Failed to initialize SQL.js: ' + error.message);
       console.error('SQL.js initialization error:', error);
       showError('Failed to initialize database: ' + error.message);
       updateDatabaseStatus('error');
@@ -616,7 +1008,10 @@ SELECT * FROM customers LIMIT 5;</textarea>
     document.getElementById('runQueryBtn').addEventListener('click', executeQuery);
     document.getElementById('formatBtn').addEventListener('click', formatSQL);
     document.getElementById('clearBtn').addEventListener('click', clearEditor);
-    document.getElementById('loadSchemaBtn').addEventListener('click', loadSchemaToDatabase);
+
+    // Schema panel buttons
+    document.getElementById('copySchemaBtn').addEventListener('click', copySchemaToClipboard);
+    document.getElementById('loadToEditorBtn').addEventListener('click', loadSchemaToEditor);
 
     // Error handling
     document.getElementById('dismissError').addEventListener('click', hideError);
@@ -644,88 +1039,139 @@ SELECT * FROM customers LIMIT 5;</textarea>
 
   // Generate schema and load it into the database
   async function generateAndLoadSchema() {
-    const prompt = document.getElementById('schemaPrompt').value.trim();
-    if (!prompt) {
-      showError('Please enter a schema description first.');
-      return;
-    }
-    
-    if (!db) {
-      showError('Database not initialized. Please refresh the page.');
-      return;
-    }
-    
-    addDebugInfo(\`Starting schema generation for: \${prompt}\`);
-    
-    // Show loading state
-    const btn = document.getElementById('generateSchemaBtn');
-    const originalHTML = btn.innerHTML;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Generating...</span>';
-    btn.disabled = true;
-    
-    updateStatus('Generating SQL schema...');
-    updateDatabaseStatus('loading');
-    
     try {
-      // Call API
-      addDebugInfo('Making API call to /generate-schema');
-      const response = await fetch('/generate-schema', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ prompt })
-      });
-      
-      addDebugInfo(\`API response status: \${response.status}\`);
-      const data = await response.json();
-      addDebugInfo(\`API response received. Source: \${data.source}\`);
-      
-      if (data.error) {
-        addDebugInfo(\`API Error: \${data.error}\`);
+      const prompt = document.getElementById('schemaPrompt').value.trim();
+      if (!prompt) {
+        showError('Please enter a schema description first.');
+        return;
       }
-      
-      if (data.schema) {
-  
-        
-        // Load the schema into the database
-        await loadSchemaIntoDatabase(data.schema);
-        
-        // Update schema display
-        updateSchemaDisplayFromSQL(data.schema);
-        
-        // Update status based on source
-        if (data.source === 'claude-api') {
-          updateStatus('SQL schema generated and loaded successfully using Claude AI');
-          addDebugInfo('Successfully used Claude API and loaded schema into database');
-        } else {
-          updateStatus('Using mock schema and loaded into database (Claude API unavailable)');
-          addDebugInfo('Used fallback schema and loaded into database');
+
+      if (!db) {
+        showError('Database not initialized. Please refresh the page.');
+        return;
+      }
+
+      addDebugInfo("Starting schema generation for: " + prompt);
+
+      // Show loading state
+      const btn = document.getElementById('generateSchemaBtn');
+      const originalHTML = btn.innerHTML;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Generating...</span>';
+      btn.disabled = true;
+
+      updateStatus('Generating SQL schema...');
+      updateDatabaseStatus('loading');
+
+      try {
+        const response = await fetch('/generate-schema', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ prompt })
+        });
+
+        if (!response.ok) {
+          throw new Error("HTTP error! status: " + response.status);
         }
-        
-        updateDatabaseStatus('connected');
-        
+
+        const data = await response.json();
+        addDebugInfo("API response received. Source: " + data.source);
+
         if (data.error) {
-          addDebugInfo(\`Warning: \${data.error}\`);
+          addDebugInfo("API Error: " + data.error);
         }
-      } else {
-        throw new Error(data.error || 'Failed to generate schema');
+
+        if (data.schema) {
+          // Clean the schema before processing
+          const cleanedSchema = cleanGeneratedSchema(data.schema);
+          addDebugInfo('Schema cleaned and ready for loading');
+          
+          await loadSchemaIntoDatabase(cleanedSchema);
+          
+          // Display schema in the left panel
+          displaySchemaInPanel(cleanedSchema);
+          
+          // Also update the editor with the cleaned schema
+          sqlEditor.setValue(cleanedSchema);
+
+          if (data.source === 'claude-api') {
+            updateStatus('SQL schema generated and loaded successfully using Claude AI');
+            addDebugInfo('Successfully used Claude API and loaded schema into database');
+          } else {
+            updateStatus('Using mock schema and loaded into database (Claude API unavailable)');
+            addDebugInfo('Used fallback schema and loaded into database');
+          }
+
+          updateDatabaseStatus('connected');
+        } else {
+          throw new Error(data.error || 'Failed to generate schema');
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        addDebugInfo("Error occurred: " + error.message);
+        showError('Failed to generate schema: ' + error.message);
+        updateStatus('Schema generation failed');
+        updateDatabaseStatus('error');
+      } finally {
+        // Reset button
+        btn.innerHTML = originalHTML;
+        btn.disabled = false;
+        addDebugInfo('Schema generation process completed');
       }
     } catch (error) {
-      console.error('Error:', error);
-      addDebugInfo(\`Error occurred: \${error.message}\`);
-      showError('Failed to generate schema: ' + error.message);
-      updateStatus('Schema generation failed');
-      updateDatabaseStatus('error');
-    } finally {
-      // Reset button
-      btn.innerHTML = originalHTML;
-      btn.disabled = false;
-      addDebugInfo('Schema generation process completed');
+      console.error('Unexpected error:', error);
+      showError('An unexpected error occurred: ' + error.message);
     }
   }
 
-  // Load schema into SQL.js database
+  // Add this new function to clean generated schema
+  function cleanGeneratedSchema(schema) {
+    // Remove markdown code blocks and clean up the schema
+    let cleaned = schema
+      // Remove markdown code block markers
+      .replace(/\\\`\\\`\\\`sql\\s*/gi, '')
+      .replace(/\\\`\\\`\\\`\\s*/g, '')
+      // Remove any leading/trailing whitespace
+      .trim();
+    
+    // Additional cleaning - remove explanatory text that's not SQL
+    const lines = cleaned.split('\\n');
+    const sqlLines = [];
+    let inSQLBlock = false;
+    
+    for (let line of lines) {
+      const trimmedLine = line.trim();
+      
+      // Skip empty lines at the start
+      if (!inSQLBlock && !trimmedLine) {
+        continue;
+      }
+      
+      // Check if this is a SQL statement
+      if (trimmedLine.match(/^(CREATE|INSERT|UPDATE|DELETE|DROP|ALTER)/i) || 
+          trimmedLine.startsWith('--') || 
+          inSQLBlock) {
+        inSQLBlock = true;
+        sqlLines.push(line);
+      } else if (inSQLBlock && (trimmedLine.includes(';') || trimmedLine === '')) {
+        // Continue collecting if we're in a SQL block
+        sqlLines.push(line);
+      } else if (!trimmedLine.match(/^(CREATE|INSERT|UPDATE|DELETE|DROP|ALTER|--)/i) && 
+                 !inSQLBlock) {
+        // Skip explanatory text before SQL starts
+        addDebugInfo("Skipping non-SQL line: " + trimmedLine.substring(0, 50) + "...");
+        continue;
+      }
+    }
+    
+    const result = sqlLines.join('\\n').trim();
+    addDebugInfo("Original schema length: " + schema.length + ", Cleaned length: " + result.length);
+    
+    return result;
+  }
+
+  // Update the loadSchemaIntoDatabase function with better SQL parsing
   async function loadSchemaIntoDatabase(schemaSQL) {
     if (!db) {
       throw new Error('Database not initialized');
@@ -740,42 +1186,62 @@ SELECT * FROM customers LIMIT 5;</textarea>
         const tables = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';");
         if (tables.length > 0) {
           for (const table of tables[0].values) {
-            db.run(\`DROP TABLE IF EXISTS \${table[0]}\`);
-            addDebugInfo(\`Dropped table: \${table[0]}\`);
+            db.run("DROP TABLE IF EXISTS " + table[0]);
+            addDebugInfo("Dropped table: " + table[0]);
           }
         }
       } catch (e) {
-        addDebugInfo(\`Error clearing existing tables: \${e.message}\`);
+        addDebugInfo("Error clearing existing tables: " + e.message);
       }
       
-      // Split the schema into individual statements and execute them
-      const statements = schemaSQL.split(';').filter(stmt => stmt.trim());
+      // Improved SQL statement parsing
+      const statements = parseSQL(schemaSQL);
+      addDebugInfo("Parsed " + statements.length + " SQL statements from schema");
+      
       let successCount = 0;
       let errorCount = 0;
       
       for (let i = 0; i < statements.length; i++) {
-        const trimmedStmt = statements[i].trim();
-        if (trimmedStmt) {
+        const stmt = statements[i].trim();
+        if (stmt) {
           try {
-            addDebugInfo(\`Executing statement \${i+1}/\${statements.length}: \${trimmedStmt.substring(0, 50)}...\`);
-            db.run(trimmedStmt);
+            addDebugInfo("Executing statement " + (i+1) + "/" + statements.length + ": " + stmt.substring(0, 50) + "...");
+            db.run(stmt);
             successCount++;
+            addDebugInfo("✓ Statement " + (i+1) + " executed successfully");
           } catch (error) {
             errorCount++;
-            addDebugInfo(\`Error executing statement: \${error.message}\`);
-            // Continue with other statements
+            addDebugInfo("✗ Error executing statement " + (i+1) + ": " + error.message);
+            addDebugInfo("Failed statement: " + stmt);
+            console.error("SQL execution error for statement " + (i+1) + ":", error);
           }
         }
       }
       
-      addDebugInfo(\`Schema loading completed: \${successCount} statements succeeded, \${errorCount} failed\`);
+      addDebugInfo("Schema loading completed: " + successCount + " statements succeeded, " + errorCount + " failed");
       
       // Verify tables were created
       const result = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';");
       if (result.length > 0) {
         const tableCount = result[0].values.length;
-        addDebugInfo(\`Verified \${tableCount} tables in database\`);
-        updateStatus(\`Database loaded with \${tableCount} tables. Ready for queries!\`);
+        addDebugInfo("Verified " + tableCount + " tables in database:");
+        
+        // Log each table that was created
+        result[0].values.forEach((row, index) => {
+          const tableName = row[0];
+          addDebugInfo("  Table " + (index + 1) + ": " + tableName);
+          
+          // Test if we can query the table
+          try {
+            const testResult = db.exec("SELECT COUNT(*) as count FROM " + tableName);
+            const rowCount = testResult[0].values[0][0];
+            addDebugInfo("    ✓ Table " + tableName + " is queryable with " + rowCount + " rows");
+          } catch (testError) {
+            addDebugInfo("    ✗ Table " + tableName + " query test failed: " + testError.message);
+          }
+        });
+        
+        updateStatus("Database loaded with " + tableCount + " tables. Ready for queries!");
         updateDatabaseStatus('connected');
       } else {
         addDebugInfo("No tables were created in the database!");
@@ -784,380 +1250,73 @@ SELECT * FROM customers LIMIT 5;</textarea>
       }
       
     } catch (error) {
-      addDebugInfo(\`Error loading schema: \${error.message}\`);
+      addDebugInfo("Error loading schema: " + error.message);
       console.error("Schema loading error:", error);
       updateDatabaseStatus('error');
       throw error;
     }
   }
 
-  // Load current editor content into database
-  async function loadSchemaToDatabase() {
-    const schemaSQL = sqlEditor.getValue().trim();
-    if (!schemaSQL) {
-      showError('No SQL content to load. Generate a schema first.');
-      return;
-    }
-
-    if (!db) {
-      showError('Database not initialized. Please refresh the page.');
-      return;
-    }
-
-    const btn = document.getElementById('loadSchemaBtn');
-    const originalHTML = btn.innerHTML;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Loading...</span>';
-    btn.disabled = true;
-
-    try {
-      await loadSchemaIntoDatabase(schemaSQL);
-      updateSchemaDisplayFromSQL(schemaSQL);
-      showNotification('Schema loaded into database successfully!', 'success');
-    } catch (error) {
-      showError('Failed to load schema: ' + error.message);
-    } finally {
-      btn.innerHTML = originalHTML;
-      btn.disabled = false;
-    }
-  }
-
-  // Execute SQL query
-  async function executeQuery() {
-    const query = sqlEditor.getValue().trim();
-    if (!query) {
-      showError('Please enter a SQL query first.');
-      return;
-    }
-
-    if (!db) {
-      showError('Database not initialized. Please refresh the page.');
-      return;
-    }
-
-    const btn = document.getElementById('runQueryBtn');
-    const originalHTML = btn.innerHTML;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Running...</span>';
-    btn.disabled = true;
-
-    hideError();
-    const startTime = performance.now();
-
-    try {
-      addDebugInfo(\`Executing query: \${query.substring(0, 100)}...\`);
-      
-      const results = db.exec(query);
-      const endTime = performance.now();
-      const executionTime = Math.round(endTime - startTime);
-
-      addDebugInfo(\`Query executed in \${executionTime}ms\`);
-      
-      if (results.length === 0) {
-        // Query executed but returned no results (e.g., INSERT, UPDATE, DELETE)
-        displayEmptyResults(executionTime);
-        updateStatus(\`Query executed successfully in \${executionTime}ms (no results returned)\`);
-        addDebugInfo('Query executed successfully but returned no rows');
-      } else {
-        // Display results
-        displayQueryResults(results[0], executionTime);
-        addDebugInfo(\`Query returned \${results[0].values.length} rows\`);
-      }
-
-    } catch (error) {
-      console.error("SQL Query Error:", error);
-      addDebugInfo(\`Query error: \${error.message}\`);
-      showError('SQL Error: ' + error.message);
-      updateStatus('Query execution failed');
-    } finally {
-      btn.innerHTML = originalHTML;
-      btn.disabled = false;
-    }
-  }
-
-  // Display query results in the table
-  function displayQueryResults(result, executionTime) {
-    const resultsPanel = document.getElementById('resultsPanel');
-    const resultsTable = document.getElementById('resultsTable');
-    const resultsHeader = document.getElementById('resultsHeader');
-    const resultsBody = document.getElementById('resultsBody');
-    const emptyResults = document.getElementById('emptyResults');
-    const rowCount = document.getElementById('rowCount');
-    const queryTime = document.getElementById('queryTime');
-
-    // Show results panel
-    resultsPanel.classList.add('show');
-    
-    // Hide empty results message and show table
-    emptyResults.style.display = 'none';
-    resultsTable.style.display = 'table';
-
-    // Clear previous results
-    resultsHeader.innerHTML = '';
-    resultsBody.innerHTML = '';
-
-    // Create header row
-    result.columns.forEach(column => {
-      const th = document.createElement('th');
-      th.className = 'px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider';
-      th.textContent = column;
-      resultsHeader.appendChild(th);
-    });
-
-    // Create data rows
-    result.values.forEach((row, index) => {
-      const tr = document.createElement('tr');
-      tr.className = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
-      
-      row.forEach(cell => {
-        const td = document.createElement('td');
-        td.className = 'px-4 py-3 text-sm text-gray-900 max-w-xs truncate';
-        
-        // Handle different data types
-        if (cell === null) {
-          td.textContent = 'NULL';
-          td.className += ' text-gray-400 italic';
-        } else if (typeof cell === 'object') {
-          td.textContent = JSON.stringify(cell);
-        } else {
-          td.textContent = String(cell);
-        }
-        
-        // Add tooltip for long content
-        if (String(cell).length > 50) {
-          td.title = String(cell);
-        }
-        
-        tr.appendChild(td);
-      });
-      
-      resultsBody.appendChild(tr);
-    });
-
-    // Update statistics
-    rowCount.textContent = \`\${result.values.length} rows\`;
-    queryTime.textContent = \`\${executionTime}ms\`;
-    
-    updateStatus(\`Query executed successfully. \${result.values.length} rows returned in \${executionTime}ms.\`);
-  }
-
-  // Display empty results
-  function displayEmptyResults(executionTime) {
-    const resultsPanel = document.getElementById('resultsPanel');
-    const resultsTable = document.getElementById('resultsTable');
-    const emptyResults = document.getElementById('emptyResults');
-    const rowCount = document.getElementById('rowCount');
-    const queryTime = document.getElementById('queryTime');
-
-    // Show results panel
-    resultsPanel.classList.add('show');
-    
-    // Show empty results message and hide table
-    resultsTable.style.display = 'none';
-    emptyResults.style.display = 'block';
-
-    // Update statistics
-    rowCount.textContent = '0 rows';
-    queryTime.textContent = \`\${executionTime}ms\`;
-  }
-
-  // Format SQL code
-  function formatSQL() {
-    let sql = sqlEditor.getValue();
-    if (!sql.trim()) return;
-
-    // Basic SQL formatting
-    sql = sql
-      .replace(/\\s+/g, ' ') // Replace multiple spaces with single space
-      .replace(/\\s*,\\s*/g, ',\\n  ') // Add line breaks after commas
-      .replace(/\\s*(SELECT|FROM|WHERE|JOIN|LEFT JOIN|RIGHT JOIN|INNER JOIN|ORDER BY|GROUP BY|HAVING|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER)\\s+/gi, '\\n$1 ')
-      .replace(/\\s*;\\s*/g, ';\\n\\n') // Add line breaks after semicolons
+  // Add improved SQL parsing function
+  function parseSQL(sql) {
+    // Remove comments and normalize
+    let cleanSQL = sql
+      .replace(/--.*$/gm, '') // Remove line comments
+      .replace(/\\/\\*[\\s\\S]*?\\*\\//g, '') // Remove block comments
       .trim();
 
-    sqlEditor.setValue(sql);
-    showNotification('SQL formatted!', 'success');
-  }
-
-  // Clear editor
-  function clearEditor() {
-    if (confirm('Clear the SQL editor?')) {
-      sqlEditor.setValue('');
-      hideError();
-      document.getElementById('resultsPanel').classList.remove('show');
-      updateStatus('Editor cleared. Ready for new queries.');
-    }
-  }
-
-  // Update schema display from SQL
-  function updateSchemaDisplayFromSQL(sql) {
-    const schemaContent = document.getElementById('schemaContent');
+    const statements = [];
+    let currentStatement = '';
+    let parenthesesCount = 0;
+    let inSingleQuote = false;
+    let inDoubleQuote = false;
     
-    try {
-      // Extract table information from SQL
-      const tables = extractTablesFromSQL(sql);
+    for (let i = 0; i < cleanSQL.length; i++) {
+      const char = cleanSQL[i];
+      const prevChar = i > 0 ? cleanSQL[i - 1] : '';
       
-      if (tables.length === 0) {
-        schemaContent.innerHTML = \`
-          <div class="text-sm text-gray-500 text-center py-4">
-            <i class="fas fa-exclamation-triangle text-yellow-500 mb-2"></i>
-            <p>No tables found in schema</p>
-          </div>
-        \`;
-        return;
+      // Handle quotes
+      if (char === "'" && prevChar !== '\\\\' && !inDoubleQuote) {
+        inSingleQuote = !inSingleQuote;
+      } else if (char === '"' && prevChar !== '\\\\' && !inSingleQuote) {
+        inDoubleQuote = !inDoubleQuote;
       }
-
-      let html = '';
-      tables.forEach(table => {
-        html += \`
-          <div class="bg-gray-50 rounded-lg p-3 mb-3 border border-gray-200">
-            <div class="flex items-center justify-between mb-2">
-              <div class="flex items-center">
-                <i class="fas fa-table text-blue-600 mr-2"></i>
-                <span class="font-semibold text-gray-900">\${table.name}</span>
-              </div>
-              <span class="text-xs text-gray-500">\${table.columns.length} columns</span>
-            </div>
-            <div class="space-y-1">
-        \`;
-        
-        table.columns.forEach(column => {
-          const isPrimary = column.toLowerCase().includes('primary key');
-          const isForeign = column.toLowerCase().includes('foreign key') || column.toLowerCase().includes('references');
-          
-          html += \`
-            <div class="text-xs flex items-center justify-between p-1 rounded \${isPrimary ? 'bg-yellow-100' : isForeign ? 'bg-blue-100' : 'bg-gray-100'}">
-              <span class="font-mono text-gray-700 truncate">\${column}</span>
-              \${isPrimary ? '<i class="fas fa-key text-yellow-600 ml-1" title="Primary Key"></i>' : ''}
-              \${isForeign ? '<i class="fas fa-link text-blue-600 ml-1" title="Foreign Key"></i>' : ''}
-            </div>
-          \`;
-        });
-        
-        html += \`
-            </div>
-          </div>
-        \`;
-      });
-
-      schemaContent.innerHTML = html;
       
-    } catch (error) {
-      addDebugInfo(\`Error parsing schema: \${error.message}\`);
-      schemaContent.innerHTML = \`
-        <div class="text-sm text-gray-500 text-center py-4">
-          <i class="fas fa-exclamation-triangle text-orange-500 mb-2"></i>
-          <p>Schema loaded (parsing error)</p>
-        </div>
-      \`;
-    }
-  }
-
-  // Extract table information from SQL
-  function extractTablesFromSQL(sql) {
-    const tables = [];
-    const createTableRegex = /CREATE\\s+TABLE\\s+(\\w+)\\s*\\(([\\s\\S]*?)\\);/gi;
-    let match;
-
-    while ((match = createTableRegex.exec(sql)) !== null) {
-      const tableName = match[1];
-      const tableDefinition = match[2];
-      
-      // Extract columns - improved parsing
-      const columns = tableDefinition
-        .split(',')
-        .map(col => col.trim().replace(/\\s+/g, ' '))
-        .filter(col => col && !col.toLowerCase().startsWith('foreign key') && !col.toLowerCase().startsWith('constraint'));
-
-      tables.push({
-        name: tableName,
-        columns: columns
-      });
-    }
-
-    return tables;
-  }
-
-  // Show error message
-  function showError(message) {
-    const errorPanel = document.getElementById('errorPanel');
-    const errorMessage = document.getElementById('errorMessage');
-    
-    errorMessage.textContent = message;
-    errorPanel.classList.add('show');
-    
-    addDebugInfo(\`Error shown: \${message}\`);
-  }
-
-  // Hide error message
-  function hideError() {
-    document.getElementById('errorPanel').classList.remove('show');
-  }
-
-  // Show notification
-  function showNotification(message, type = 'info') {
-    const notification = document.createElement('div');
-    notification.className = \`fixed top-4 right-4 max-w-sm p-4 rounded-lg shadow-lg z-50 transform translate-x-full transition-transform duration-300\`;
-    
-    // Set colors based on type
-    switch (type) {
-      case 'success':
-        notification.className += ' bg-green-100 border border-green-200 text-green-800';
-        break;
-      case 'error':
-        notification.className += ' bg-red-100 border border-red-200 text-red-800';
-        break;
-      default:
-        notification.className += ' bg-blue-100 border border-blue-200 text-blue-800';
-    }
-    
-    notification.innerHTML = \`
-      <div class="flex items-center space-x-2">
-        <i class="fas fa-\${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i>
-        <span class="text-sm font-medium">\${message}</span>
-      </div>
-    \`;
-    
-    document.body.appendChild(notification);
-    
-    // Animate in
-    setTimeout(() => {
-      notification.classList.remove('translate-x-full');
-    }, 100);
-    
-    // Remove after 3 seconds
-    setTimeout(() => {
-      notification.classList.add('translate-x-full');
-      setTimeout(() => {
-        if (notification.parentNode) {
-          notification.parentNode.removeChild(notification);
+      // Handle parentheses (only if not in quotes)
+      if (!inSingleQuote && !inDoubleQuote) {
+        if (char === '(') {
+          parenthesesCount++;
+        } else if (char === ')') {
+          parenthesesCount--;
         }
-      }, 300);
-    }, 3000);
-  }
-
-  // Update status message
-  function updateStatus(message) {
-    const statusContent = document.getElementById('statusContent');
-    statusContent.textContent = message;
-    addDebugInfo(\`Status: \${message}\`);
-  }
-
-  // Add debug information
-  function addDebugInfo(message) {
-    const timestamp = new Date().toLocaleTimeString();
-    debugInfo.push(\`[\${timestamp}] \${message}\`);
-    
-    // Keep only last 50 entries
-    if (debugInfo.length > 50) {
-      debugInfo.shift();
+      }
+      
+      currentStatement += char;
+      
+      // Check for statement end (semicolon outside quotes and balanced parentheses)
+      if (char === ';' && !inSingleQuote && !inDoubleQuote && parenthesesCount === 0) {
+        const trimmed = currentStatement.trim();
+        if (trimmed && !trimmed.match(/^\\s*$/)) {
+          statements.push(trimmed);
+        }
+        currentStatement = '';
+      }
     }
     
-    // Update debug panel if visible
-    const debugContent = document.getElementById('debugContent');
-    if (debugContent) {
-      debugContent.innerHTML = debugInfo.join('\\n');
-      debugContent.scrollTop = debugContent.scrollHeight;
+    // Add remaining statement if it doesn't end with semicolon
+    const trimmed = currentStatement.trim();
+    if (trimmed && !trimmed.match(/^\\s*$/)) {
+      statements.push(trimmed + (trimmed.endsWith(';') ? '' : ';'));
     }
+    
+    return statements.filter(stmt => {
+      const cleaned = stmt.trim();
+      return cleaned.length > 0 && 
+             !cleaned.match(/^\\s*$/) && 
+             !cleaned.match(/^-+\\s*$/) &&
+             cleaned.match(/^(CREATE|INSERT|UPDATE|DELETE|DROP|ALTER)/i);
+    });
   }
-
   </script>
 </body>
 </html>`;
