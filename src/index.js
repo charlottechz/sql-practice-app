@@ -696,11 +696,15 @@ SELECT * FROM customers LIMIT 5;</textarea>
     const rowCount = document.getElementById('rowCount');
     const queryTime = document.getElementById('queryTime');
     const emptyResults = document.getElementById('emptyResults');
+    const resultsTable = document.getElementById('resultsTable');
 
     // Clear previous results
     resultsHeader.innerHTML = '';
     resultsBody.innerHTML = '';
     emptyResults.style.display = 'none';
+    
+    // Make sure the table is visible (fix the main issue)
+    resultsTable.style.display = 'table';
 
     // Show panel
     resultsPanel.classList.add('show');
@@ -728,6 +732,8 @@ SELECT * FROM customers LIMIT 5;</textarea>
       });
       resultsBody.appendChild(tr);
     });
+    
+    addDebugInfo('Results table displayed with ' + result.values.length + ' rows');
   }
 
   function displayEmptyResults(executionTime) {
@@ -735,6 +741,7 @@ SELECT * FROM customers LIMIT 5;</textarea>
     const emptyResults = document.getElementById('emptyResults');
     const rowCount = document.getElementById('rowCount');
     const queryTime = document.getElementById('queryTime');
+    const resultsTable = document.getElementById('resultsTable');
 
     // Show panel
     resultsPanel.classList.add('show');
@@ -744,8 +751,10 @@ SELECT * FROM customers LIMIT 5;</textarea>
     rowCount.textContent = '0 rows';
     queryTime.textContent = executionTime + 'ms';
 
-    // Hide table
-    document.getElementById('resultsTable').style.display = 'none';
+    // Hide table when no results
+    resultsTable.style.display = 'none';
+    
+    addDebugInfo('Empty results displayed');
   }
 
   function formatSQL() {
