@@ -300,6 +300,43 @@ export default {
     .results-panel.show {
       max-height: 600px;
     }
+    .loading-popup {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+    .loading-popup.show {
+      display: flex;
+    }
+    .loading-content {
+      background: white;
+      padding: 2rem;
+      border-radius: 0.75rem;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+      text-align: center;
+      max-width: 400px;
+      margin: 1rem;
+    }
+    .loading-spinner {
+      width: 3rem;
+      height: 3rem;
+      border: 3px solid #e5e7eb;
+      border-top: 3px solid #3b82f6;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 1rem;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
     .db-status {
       display: inline-flex;
       align-items: center;
@@ -502,6 +539,13 @@ SELECT * FROM customers LIMIT 5;</textarea>
                 <span>Run Query</span>
               </button>
               <button
+                id="reloadDbBtn"
+                class="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-md transition-colors flex items-center space-x-2"
+              >
+                <i class="fas fa-refresh"></i>
+                <span>Reload Database</span>
+              </button>
+              <button
                 id="formatBtn"
                 class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium px-4 py-2 rounded-md transition-colors flex items-center space-x-2"
               >
@@ -595,6 +639,15 @@ SELECT * FROM customers LIMIT 5;</textarea>
     </div>
   </div>
 
+  <!-- Loading Popup -->
+  <div id="loadingPopup" class="loading-popup">
+    <div class="loading-content">
+      <div class="loading-spinner"></div>
+      <h3 class="text-lg font-semibold text-gray-900 mb-2">Database Loading</h3>
+      <p class="text-gray-600" id="loadingMessage">Loading schema...</p>
+    </div>
+  </div>
+
   <script>
   // Global variables
   let sqlEditor;
@@ -637,6 +690,25 @@ SELECT * FROM customers LIMIT 5;</textarea>
     const errorPanel = document.getElementById('errorPanel');
     if (errorPanel) {
       errorPanel.classList.remove('show');
+    }
+  }
+
+  function showLoadingPopup(message = 'Loading schema...') {
+    const loadingPopup = document.getElementById('loadingPopup');
+    const loadingMessage = document.getElementById('loadingMessage');
+    
+    if (loadingMessage) {
+      loadingMessage.textContent = message;
+    }
+    if (loadingPopup) {
+      loadingPopup.classList.add('show');
+    }
+  }
+
+  function hideLoadingPopup() {
+    const loadingPopup = document.getElementById('loadingPopup');
+    if (loadingPopup) {
+      loadingPopup.classList.remove('show');
     }
   }
 
@@ -839,6 +911,192 @@ SELECT * FROM customers LIMIT 5;</textarea>
     return tables;
   }
 
+  // Function to refresh database overview from actual database state
+  function refreshDatabaseOverview() {
+    const databaseContent = document.getElementById('databaseContent');
+    const copyBtn = document.getElementById('copyDatabaseBtn');
+    const loadBtn = document.getElementById('loadToEditorBtn');
+    
+    if (!db) {
+      databaseContent.innerHTML = '<div class="text-sm text-gray-500 text-center py-4">Database not initialized</div>';
+      return;
+    }
+    
+    try {
+      // Get tables directly from the database
+      const result = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name;");
+      
+      if (result.length === 0 || result[0].values.length === 0) {
+        databaseContent.innerHTML = '<div class="text-sm text-gray-500 text-center py-4">No tables found in database</div>';
+        copyBtn.style.display = 'none';
+        loadBtn.style.display = 'none';
+        return;
+      }
+      
+      // Show action buttons
+      copyBtn.style.display = 'inline-block';
+      loadBtn.style.display = 'inline-block';
+      
+      // Get detailed information for each table
+      const tables = [];
+      for (const tableRow of result[0].values) {
+        const tableName = tableRow[0];
+        
+        try {
+          // Get column information
+          const schemaResult = db.exec("PRAGMA table_info(" + tableName + ");");
+          const columns = [];
+          
+          if (schemaResult.length > 0) {
+            schemaResult[0].values.forEach(col => {
+              const columnName = col[1]; // column name
+              const columnType = col[2]; // column type
+              columns.push(columnName + ' (' + columnType + ')');
+            });
+          }
+          
+          // Get row count
+          let rowCount = 0;
+          try {
+            const countResult = db.exec("SELECT COUNT(*) as count FROM " + tableName);
+            if (countResult.length > 0) {
+              rowCount = countResult[0].values[0][0];
+            }
+          } catch (e) {
+            addDebugInfo('Could not get row count for table ' + tableName + ': ' + e.message);
+          }
+          
+          tables.push({
+            name: tableName,
+            columns: columns,
+            rowCount: rowCount
+          });
+          
+        } catch (e) {
+          addDebugInfo('Error getting info for table ' + tableName + ': ' + e.message);
+          tables.push({
+            name: tableName,
+            columns: ['Error loading columns'],
+            rowCount: 0
+          });
+        }
+      }
+      
+      // Display table information
+      let html = '';
+      tables.forEach(table => {
+        html += \`
+          <div class="table-info" onclick="selectTableForQuery('\${table.name}')">
+            <h4>
+              <i class="fas fa-table mr-2"></i>
+              \${table.name}
+              <button class="query-btn ml-auto" onclick="event.stopPropagation(); selectTableForQuery('\${table.name}')">
+                <i class="fas fa-arrow-right mr-1"></i>Query
+              </button>
+            </h4>
+            <div class="column-list">
+              \${table.columns.map(col => \`<span class="column-tag">\${col}</span>\`).join('')}
+            </div>
+            <div class="row-count">
+              <i class="fas fa-database mr-1"></i>
+              \${table.rowCount} rows
+            </div>
+          </div>
+        \`;
+      });
+      
+      // Add refresh button and schema button
+      html += \`
+        <div class="mt-4 pt-4 border-t border-gray-200 space-y-2">
+          <button id="refreshOverviewBtn" class="w-full bg-blue-100 hover:bg-blue-200 text-blue-700 font-medium px-4 py-2 rounded-md transition-colors flex items-center justify-center space-x-2">
+            <i class="fas fa-sync-alt"></i>
+            <span>Refresh Database Overview</span>
+          </button>
+          <button id="showSchemaBtn" class="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium px-4 py-2 rounded-md transition-colors flex items-center justify-center space-x-2">
+            <i class="fas fa-code"></i>
+            <span>Show Schema Creation SQL</span>
+          </button>
+        </div>
+      \`;
+      
+      databaseContent.innerHTML = html;
+      
+      // Add event listeners
+      document.getElementById('refreshOverviewBtn').addEventListener('click', function() {
+        addDebugInfo('Manually refreshing database overview...');
+        refreshDatabaseOverview();
+        updateStatus('Database overview refreshed!');
+        
+        // Temporarily change button to show action was performed
+        const originalHTML = this.innerHTML;
+        this.innerHTML = '<i class="fas fa-check"></i><span>Overview Refreshed!</span>';
+        this.classList.remove('bg-blue-100', 'hover:bg-blue-200', 'text-blue-700');
+        this.classList.add('bg-green-100', 'text-green-700');
+        
+        // Reset button back to original state after 2 seconds
+        setTimeout(() => {
+          this.innerHTML = originalHTML;
+          this.classList.remove('bg-green-100', 'text-green-700');
+          this.classList.add('bg-blue-100', 'hover:bg-blue-200', 'text-blue-700');
+        }, 2000);
+      });
+      
+      document.getElementById('showSchemaBtn').addEventListener('click', function() {
+        if (currentDatabase) {
+          sqlEditor.setValue(currentDatabase);
+          updateStatus('Schema creation SQL loaded to editor. You can see how the database was built!');
+          
+          // Temporarily change button text to show action was performed
+          const originalHTML = this.innerHTML;
+          this.innerHTML = '<i class="fas fa-check"></i><span>Schema SQL loaded to editor</span>';
+          this.classList.remove('bg-gray-100', 'hover:bg-gray-200');
+          this.classList.add('bg-green-100', 'text-green-700');
+          
+          // Reset button back to original state after 2 seconds
+          setTimeout(() => {
+            this.innerHTML = originalHTML;
+            this.classList.remove('bg-green-100', 'text-green-700');
+            this.classList.add('bg-gray-100', 'hover:bg-gray-200');
+          }, 2000);
+        } else {
+          // Fallback: Generate schema from current database state
+          try {
+            addDebugInfo('No stored schema SQL found, generating from current database state...');
+            const generatedSQL = generateSchemaFromDatabase();
+            if (generatedSQL) {
+              sqlEditor.setValue(generatedSQL);
+              updateStatus('Current database schema generated and loaded to editor!');
+              
+              // Temporarily change button text to show action was performed
+              const originalHTML = this.innerHTML;
+              this.innerHTML = '<i class="fas fa-check"></i><span>Current Schema Generated</span>';
+              this.classList.remove('bg-gray-100', 'hover:bg-gray-200');
+              this.classList.add('bg-green-100', 'text-green-700');
+              
+              // Reset button back to original state after 2 seconds
+              setTimeout(() => {
+                this.innerHTML = originalHTML;
+                this.classList.remove('bg-green-100', 'text-green-700');
+                this.classList.add('bg-gray-100', 'hover:bg-gray-200');
+              }, 2000);
+            } else {
+              showError('No database tables found to generate schema from.');
+            }
+          } catch (error) {
+            addDebugInfo('Error generating schema from database: ' + error.message);
+            showError('Could not generate schema: ' + error.message);
+          }
+        }
+      });
+      
+      addDebugInfo('Database overview refreshed with ' + tables.length + ' tables');
+      
+    } catch (error) {
+      addDebugInfo('Error refreshing database overview: ' + error.message);
+      databaseContent.innerHTML = '<div class="text-sm text-red-500 text-center py-4">Error loading database overview: ' + error.message + '</div>';
+    }
+  }
+
   // Function to display database in the left panel
   function displayDatabaseInPanel(database) {
     const databaseContent = document.getElementById('databaseContent');
@@ -1003,6 +1261,9 @@ SELECT * FROM customers LIMIT 5;</textarea>
     document.getElementById('runQueryBtn').addEventListener('click', executeQuery);
     document.getElementById('formatBtn').addEventListener('click', formatSQL);
     document.getElementById('clearBtn').addEventListener('click', clearEditor);
+    
+    // Add reload database button event listener
+    document.getElementById('reloadDbBtn').addEventListener('click', reloadDatabaseFromEditor);
 
     // Database panel buttons
     document.getElementById('copyDatabaseBtn').addEventListener('click', copyDatabaseToClipboard);
@@ -1054,6 +1315,7 @@ SELECT * FROM customers LIMIT 5;</textarea>
       btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Generating...</span>';
       btn.disabled = true;
 
+      showLoadingPopup('Generating SQL database...');
       updateStatus('Generating SQL database...');
       updateDatabaseStatus('loading');
 
@@ -1079,13 +1341,14 @@ SELECT * FROM customers LIMIT 5;</textarea>
 
         if (data.database) {
           // Clean the database before processing
+          showLoadingPopup('Loading schema into database...');
           const cleanedDatabase = cleanGeneratedDatabase(data.database);
           addDebugInfo('Database cleaned and ready for loading');
           
           await loadDatabaseIntoDatabase(cleanedDatabase);
           
-          // Display database in the left panel
-          displayDatabaseInPanel(cleanedDatabase);
+          // Refresh database overview with current state
+          refreshDatabaseOverview();
           
           // Set a clean query editor with helpful comments instead of showing the schema SQL
           sqlEditor.setValue(\`-- Write your SQL queries here
@@ -1119,6 +1382,7 @@ SELECT * FROM customers LIMIT 5;</textarea>
         // Reset button
         btn.innerHTML = originalHTML;
         btn.disabled = false;
+        hideLoadingPopup();
         addDebugInfo('Database generation process completed');
       }
     } catch (error) {
@@ -1150,6 +1414,56 @@ SELECT * FROM customers LIMIT 5;</textarea>
 SELECT * FROM \${tableName} LIMIT 10;\`;
     sqlEditor.setValue(sampleQuery);
     updateStatus(\`Sample query for \${tableName} loaded. You can modify and run it!\`);
+  }
+
+  // Add a new function to reload the generated database (not editor content)
+  function reloadDatabaseFromEditor() {
+    if (!currentDatabase) {
+      showError('No generated database to reload. Please generate a database first.');
+      return;
+    }
+
+    if (!db) {
+      showError('Database not initialized. Please refresh the page.');
+      return;
+    }
+
+    try {
+      addDebugInfo('Reloading generated database...');
+      showLoadingPopup('Reloading database schema...');
+      updateDatabaseStatus('loading');
+      
+      // Reload the stored generated database
+      loadDatabaseIntoDatabase(currentDatabase).then(() => {
+        // Refresh the database panel with current state
+        refreshDatabaseOverview();
+        
+        // Reset editor to clean query state
+        sqlEditor.setValue(\`-- Write your SQL queries here
+-- Example: SELECT * FROM customers LIMIT 5;
+-- Try these common queries:
+--   SELECT COUNT(*) FROM table_name;
+--   SELECT * FROM table_name WHERE condition;
+--   SELECT column1, column2 FROM table_name ORDER BY column1;
+
+\`);
+        
+        updateStatus('Generated database reloaded successfully!');
+        updateDatabaseStatus('connected');
+        hideLoadingPopup();
+        addDebugInfo('Generated database successfully reloaded');
+      }).catch(error => {
+        showError('Failed to reload database: ' + error.message);
+        updateDatabaseStatus('error');
+        hideLoadingPopup();
+        addDebugInfo('Failed to reload database: ' + error.message);
+      });
+      
+    } catch (error) {
+      showError('Error reloading database: ' + error.message);
+      hideLoadingPopup();
+      addDebugInfo('Error reloading database: ' + error.message);
+    }
   }
 
   // Add this new function to clean generated database
@@ -1214,7 +1528,6 @@ SELECT * FROM \${tableName} LIMIT 10;\`;
         if (tables.length > 0) {
           for (const table of tables[0].values) {
             db.run("DROP TABLE IF EXISTS " + table[0]);
-            addDebugInfo("Dropped table: " + table[0]);
           }
         }
       } catch (e) {
@@ -1270,6 +1583,9 @@ SELECT * FROM \${tableName} LIMIT 10;\`;
         
         updateStatus("Database loaded with " + tableCount + " tables. Ready for queries!");
         updateDatabaseStatus('connected');
+        
+        // Auto-refresh the database overview to show current state
+        setTimeout(() => refreshDatabaseOverview(), 100);
       } else {
         addDebugInfo("No tables were created in the database!");
         updateDatabaseStatus('error');
