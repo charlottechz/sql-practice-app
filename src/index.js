@@ -1271,6 +1271,24 @@ SELECT * FROM customers LIMIT 5;</textarea>
 
     // Error handling
     document.getElementById('dismissError').addEventListener('click', hideError);
+document.getElementById('loadToEditorBtn').addEventListener('click', function() {
+    if (currentDatabase && sqlEditor) {
+        // Load the database creation code into the editor
+        sqlEditor.setValue(currentDatabase);
+        
+        // Show success message
+        updateStatus('Database creation code loaded into editor');
+        addDebugInfo('Database loaded to editor successfully');
+        
+        // Optional: Focus the editor
+        sqlEditor.focus();
+        
+        // Optional: Scroll to top of editor
+        sqlEditor.setCursor(0, 0);
+    } else {
+        showError('No database available to load or editor not initialized');
+    }
+});
 
     // Database panel controls
     document.getElementById('collapseDatabase').addEventListener('click', function() {
@@ -1390,6 +1408,108 @@ SELECT * FROM customers LIMIT 5;</textarea>
       showError('An unexpected error occurred: ' + error.message);
     }
   }
+async function generateDatabase() {
+    const prompt = document.getElementById('databasePrompt').value.trim();
+    
+    if (!prompt) {
+        showError('Please enter a database description');
+        return;
+    }
+
+    showLoading('Generating database schema...');
+    addDebugInfo('Starting database generation for prompt: ' + prompt);
+
+    try {
+        const response = await fetch('/generate-schema', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ prompt: prompt })
+        });
+
+        if (!response.ok) {
+            throw new Error('HTTP error! status: ' + response.status);
+        }
+
+        const data = await response.json();
+        
+        if (data.error && !data.database) {
+            throw new Error(data.error);
+        }
+
+        // Store the current database for loading to editor
+        currentDatabase = data.database;
+        
+        addDebugInfo('Database generated successfully from: ' + data.source);
+        
+        if (data.source === 'fallback') {
+            updateStatus('Using fallback database (AI service unavailable)');
+        } else {
+            updateStatus('Database generated successfully with AI');
+        }
+
+        // Load the database
+        await loadDatabase(data.database);
+        
+        // Show the copy and load to editor buttons
+        document.getElementById('copyDatabaseBtn').style.display = 'inline-block';
+        document.getElementById('loadToEditorBtn').style.display = 'inline-block';
+        
+        hideLoading();
+        
+    } catch (error) {
+        hideLoading();
+        addDebugInfo('Database generation failed: ' + error.message);
+        showError('Failed to generate database: ' + error.message);
+    }
+}
+
+// Update the copy database function to use consistent quotes
+document.getElementById('copyDatabaseBtn').addEventListener('click', async function() {
+    if (currentDatabase) {
+        try {
+            await navigator.clipboard.writeText(currentDatabase);
+            updateStatus('Database copied to clipboard');
+            addDebugInfo('Database copied to clipboard successfully');
+        } catch (err) {
+            // Fallback for browsers that don't support clipboard API
+            const textArea = document.createElement('textarea');
+            textArea.value = currentDatabase;
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                updateStatus('Database copied to clipboard');
+                addDebugInfo('Database copied to clipboard (fallback method)');
+            } catch (fallbackErr) {
+                showError('Failed to copy to clipboard');
+            }
+            document.body.removeChild(textArea);
+        }
+    } else {
+        showError('No database available to copy');
+    }
+});
+
+// Add this helper function to show loading state
+function showLoading(message) {
+    const loadingPopup = document.getElementById('loadingPopup');
+    const loadingMessage = document.getElementById('loadingMessage');
+    
+    if (loadingMessage) {
+        loadingMessage.textContent = message || 'Loading...';
+    }
+    
+    if (loadingPopup) {
+        loadingPopup.classList.add('show');
+    }
+}
+
+
+
+// Make sure to initialize the generateDatabase event listener
+document.getElementById('generateDatabaseBtn').addEventListener('click', generateDatabase);
 
   // Add missing helper functions
   function copyDatabaseToClipboard() {
