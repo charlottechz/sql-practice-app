@@ -538,13 +538,7 @@ SELECT * FROM customers LIMIT 5;</textarea>
                 <i class="fas fa-play"></i>
                 <span>Run Query</span>
               </button>
-              <button
-                id="reloadDbBtn"
-                class="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-md transition-colors flex items-center space-x-2"
-              >
-                <i class="fas fa-refresh"></i>
-                <span>Reload Database</span>
-              </button>
+              
               <button
                 id="formatBtn"
                 class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium px-4 py-2 rounded-md transition-colors flex items-center space-x-2"
@@ -746,8 +740,37 @@ SELECT * FROM customers LIMIT 5;</textarea>
         updateStatus('Query executed successfully in ' + executionTime + 'ms (no results returned)');
         addDebugInfo('Query executed successfully but returned no rows');
       } else {
-        addDebugInfo('Query returned ' + results[0].values.length + ' rows with columns: ' + results[0].columns.join(', '));
-        displayQueryResults(results[0], executionTime);
+        // Handle multiple query results
+        if (results.length === 1) {
+          addDebugInfo('Query returned ' + results[0].values.length + ' rows with columns: ' + results[0].columns.join(', '));
+          displayQueryResults(results[0], executionTime);
+        } else {
+          // Multiple queries executed - show ALL results with data
+          addDebugInfo('Multiple queries executed (' + results.length + ' statements)');
+          let resultsWithData = [];
+          let totalRows = 0;
+          
+          for (let i = 0; i < results.length; i++) {
+            if (results[i].values && results[i].values.length > 0) {
+              resultsWithData.push({
+                result: results[i],
+                queryIndex: i + 1
+              });
+              totalRows += results[i].values.length;
+              addDebugInfo('Query ' + (i + 1) + ' returned ' + results[i].values.length + ' rows with columns: ' + results[i].columns.join(', '));
+            } else {
+              addDebugInfo('Query ' + (i + 1) + ' executed successfully but returned no rows');
+            }
+          }
+          
+          if (resultsWithData.length > 0) {
+            displayMultipleQueryResults(resultsWithData, executionTime);
+            updateStatus('Executed ' + results.length + ' queries in ' + executionTime + 'ms. Showing results from ' + resultsWithData.length + ' queries with data (total: ' + totalRows + ' rows)');
+          } else {
+            displayEmptyResults(executionTime);
+            updateStatus('Executed ' + results.length + ' queries in ' + executionTime + 'ms (no results returned)');
+          }
+        }
       }
 
     } catch (error) {
@@ -770,6 +793,8 @@ SELECT * FROM customers LIMIT 5;</textarea>
     const emptyResults = document.getElementById('emptyResults');
     const resultsTable = document.getElementById('resultsTable');
 
+    addDebugInfo('displayQueryResults called with ' + result.values.length + ' rows and columns: ' + result.columns.join(', '));
+
     // Clear previous results
     resultsHeader.innerHTML = '';
     resultsBody.innerHTML = '';
@@ -785,18 +810,23 @@ SELECT * FROM customers LIMIT 5;</textarea>
     rowCount.textContent = result.values.length + ' rows';
     queryTime.textContent = executionTime + 'ms';
 
+    addDebugInfo('Creating headers for columns: ' + result.columns.join(', '));
+
     // Create headers
-    result.columns.forEach(column => {
+    result.columns.forEach((column, index) => {
       const th = document.createElement('th');
       th.className = 'px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider';
       th.textContent = column;
       resultsHeader.appendChild(th);
+      addDebugInfo('Added header ' + (index + 1) + ': ' + column);
     });
 
+    addDebugInfo('Headers created, now creating ' + result.values.length + ' data rows');
+
     // Create rows
-    result.values.forEach(row => {
+    result.values.forEach((row, rowIndex) => {
       const tr = document.createElement('tr');
-      row.forEach(cell => {
+      row.forEach((cell, cellIndex) => {
         const td = document.createElement('td');
         td.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-900';
         td.textContent = cell !== null ? cell : 'NULL';
@@ -805,7 +835,139 @@ SELECT * FROM customers LIMIT 5;</textarea>
       resultsBody.appendChild(tr);
     });
     
-    addDebugInfo('Results table displayed with ' + result.values.length + ' rows');
+    addDebugInfo('Results table displayed with ' + result.values.length + ' rows and ' + result.columns.length + ' columns');
+  }
+
+  function displayMultipleQueryResults(resultsWithData, executionTime) {
+    const resultsPanel = document.getElementById('resultsPanel');
+    const resultsHeader = document.getElementById('resultsHeader');
+    const resultsBody = document.getElementById('resultsBody');
+    const rowCount = document.getElementById('rowCount');
+    const queryTime = document.getElementById('queryTime');
+    const emptyResults = document.getElementById('emptyResults');
+    const resultsTable = document.getElementById('resultsTable');
+
+    addDebugInfo('displayMultipleQueryResults called with ' + resultsWithData.length + ' query results');
+
+    // Clear previous results
+    resultsHeader.innerHTML = '';
+    resultsBody.innerHTML = '';
+    emptyResults.style.display = 'none';
+    
+    // Make sure the table is visible
+    resultsTable.style.display = 'table';
+
+    // Show panel
+    resultsPanel.classList.add('show');
+
+    // Calculate total rows
+    const totalRows = resultsWithData.reduce((sum, item) => sum + item.result.values.length, 0);
+    
+    // Update stats
+    rowCount.textContent = totalRows + ' rows (' + resultsWithData.length + ' queries)';
+    queryTime.textContent = executionTime + 'ms';
+
+    addDebugInfo('Creating headers for multiple queries...');
+
+    // Create a special header to indicate multiple queries
+    const queryHeaderTh = document.createElement('th');
+    queryHeaderTh.className = 'px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-blue-50';
+    queryHeaderTh.textContent = 'Query #';
+    resultsHeader.appendChild(queryHeaderTh);
+    addDebugInfo('Added Query # header');
+
+    // Find the maximum number of columns across all results and collect all unique column names
+    const maxColumns = Math.max(...resultsWithData.map(item => item.result.columns.length));
+    const allColumnNames = new Set();
+    
+    // Collect all unique column names from all queries
+    resultsWithData.forEach(item => {
+      item.result.columns.forEach(col => allColumnNames.add(col));
+    });
+    
+    // Convert to array and take the first maxColumns or pad with generic names
+    const columnNames = Array.from(allColumnNames).slice(0, maxColumns);
+    
+    // If we don't have enough unique column names, use the first result's columns and pad
+    const firstResult = resultsWithData[0].result;
+    const headerColumns = [];
+    
+    for (let i = 0; i < maxColumns; i++) {
+      if (i < firstResult.columns.length) {
+        headerColumns.push(firstResult.columns[i]);
+      } else if (i < columnNames.length) {
+        headerColumns.push(columnNames[i]);
+      } else {
+        headerColumns.push('Column ' + (i + 1));
+      }
+    }
+
+    addDebugInfo('Header columns: ' + headerColumns.join(', '));
+
+    // Create headers
+    headerColumns.forEach((columnName, index) => {
+      const th = document.createElement('th');
+      th.className = 'px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider';
+      th.textContent = columnName;
+      resultsHeader.appendChild(th);
+      addDebugInfo('Added header ' + (index + 1) + ': ' + columnName);
+    });
+
+    addDebugInfo('Headers created, now creating data rows for ' + resultsWithData.length + ' queries');
+
+    // Create rows for each query result
+    resultsWithData.forEach((item, resultIndex) => {
+      const result = item.result;
+      const queryIndex = item.queryIndex;
+      
+      addDebugInfo('Processing query ' + queryIndex + ' with ' + result.values.length + ' rows');
+      
+      // Add a separator row if this is not the first result
+      if (resultIndex > 0) {
+        const separatorTr = document.createElement('tr');
+        separatorTr.className = 'bg-gray-100';
+        
+        const separatorTd = document.createElement('td');
+        separatorTd.className = 'px-6 py-2 text-center text-xs font-medium text-gray-600';
+        separatorTd.colSpan = maxColumns + 1;
+        separatorTd.textContent = '--- Results from Query ' + queryIndex + ' (' + result.values.length + ' rows) ---';
+        separatorTr.appendChild(separatorTd);
+        resultsBody.appendChild(separatorTr);
+        addDebugInfo('Added separator for query ' + queryIndex);
+      }
+
+      // Create rows for this query's data
+      result.values.forEach((row, rowIndex) => {
+        const tr = document.createElement('tr');
+        
+        // Add query number in first column (only for first row of each query)
+        const queryTd = document.createElement('td');
+        queryTd.className = 'px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600 bg-blue-50';
+        if (rowIndex === 0) {
+          queryTd.textContent = 'Q' + queryIndex;
+        } else {
+          queryTd.textContent = '';
+        }
+        tr.appendChild(queryTd);
+        
+        // Add data cells
+        for (let colIndex = 0; colIndex < maxColumns; colIndex++) {
+          const td = document.createElement('td');
+          td.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-900';
+          
+          if (colIndex < row.length) {
+            td.textContent = row[colIndex] !== null ? row[colIndex] : 'NULL';
+          } else {
+            td.textContent = '-';
+            td.className += ' text-gray-400';
+          }
+          tr.appendChild(td);
+        }
+        resultsBody.appendChild(tr);
+      });
+    });
+    
+    addDebugInfo('Multiple query results displayed: ' + resultsWithData.length + ' queries with total ' + totalRows + ' rows');
   }
 
   function displayEmptyResults(executionTime) {
@@ -1016,6 +1178,10 @@ SELECT * FROM customers LIMIT 5;</textarea>
             <i class="fas fa-code"></i>
             <span>Show Schema Creation SQL</span>
           </button>
+          <button id="diagnoseSchemaBtn" class="w-full bg-yellow-100 hover:bg-yellow-200 text-yellow-700 font-medium px-4 py-2 rounded-md transition-colors flex items-center justify-center space-x-2">
+            <i class="fas fa-search"></i>
+            <span>Diagnose Schema Issues</span>
+          </button>
         </div>
       \`;
       
@@ -1087,6 +1253,28 @@ SELECT * FROM customers LIMIT 5;</textarea>
             showError('Could not generate schema: ' + error.message);
           }
         }
+      });
+      
+      document.getElementById('diagnoseSchemaBtn').addEventListener('click', function() {
+        addDebugInfo('Manual schema diagnosis requested...');
+        diagnoseSchemaIssues();
+        updateStatus('Schema diagnosis completed! Check the debug panel for details.');
+        
+        // Show the debug panel automatically
+        document.getElementById('debugPanel').classList.add('show');
+        
+        // Temporarily change button text to show action was performed
+        const originalHTML = this.innerHTML;
+        this.innerHTML = '<i class="fas fa-check"></i><span>Diagnosis Complete - Check Debug Panel</span>';
+        this.classList.remove('bg-yellow-100', 'hover:bg-yellow-200', 'text-yellow-700');
+        this.classList.add('bg-green-100', 'text-green-700');
+        
+        // Reset button back to original state after 3 seconds
+        setTimeout(() => {
+          this.innerHTML = originalHTML;
+          this.classList.remove('bg-green-100', 'text-green-700');
+          this.classList.add('bg-yellow-100', 'hover:bg-yellow-200', 'text-yellow-700');
+        }, 3000);
       });
       
       addDebugInfo('Database overview refreshed with ' + tables.length + ' tables');
@@ -1358,10 +1546,19 @@ document.getElementById('loadToEditorBtn').addEventListener('click', function() 
         }
 
         if (data.database) {
+          // Store the original database for comparison
+          addDebugInfo("Raw database received from API:");
+          addDebugInfo("Source: " + data.source);
+          addDebugInfo("Database preview: " + data.database.substring(0, 500) + "...");
+          
           // Clean the database before processing
           showLoadingPopup('Loading schema into database...');
           const cleanedDatabase = cleanGeneratedDatabase(data.database);
           addDebugInfo('Database cleaned and ready for loading');
+          addDebugInfo('Cleaned database preview: ' + cleanedDatabase.substring(0, 500) + "...");
+          
+          // Store the original database globally BEFORE cleaning
+          currentDatabase = data.database;
           
           await loadDatabaseIntoDatabase(cleanedDatabase);
           
@@ -1588,6 +1785,9 @@ SELECT * FROM \${tableName} LIMIT 10;\`;
 
   // Add this new function to clean generated database
   function cleanGeneratedDatabase(database) {
+    addDebugInfo("Starting database cleaning process...");
+    addDebugInfo("Original database preview: " + database.substring(0, 200) + "...");
+    
     // Remove markdown code blocks and clean up the database
     let cleaned = database
       // Remove markdown code block markers
@@ -1595,6 +1795,8 @@ SELECT * FROM \${tableName} LIMIT 10;\`;
       .replace(/\`\`\`\\s*/g, '')
       // Remove any leading/trailing whitespace
       .trim();
+    
+    addDebugInfo("After markdown removal: " + cleaned.substring(0, 200) + "...");
     
     // Additional cleaning - remove explanatory text that's not SQL
     const lines = cleaned.split('\\n');
@@ -1628,6 +1830,7 @@ SELECT * FROM \${tableName} LIMIT 10;\`;
     
     const result = sqlLines.join('\\n').trim();
     addDebugInfo("Original database length: " + database.length + ", Cleaned length: " + result.length);
+    addDebugInfo("Final cleaned database preview: " + result.substring(0, 300) + "...");
     
     return result;
   }
@@ -1704,6 +1907,9 @@ SELECT * FROM \${tableName} LIMIT 10;\`;
         updateStatus("Database loaded with " + tableCount + " tables. Ready for queries!");
         updateDatabaseStatus('connected');
         
+        // Run schema diagnosis to check for mismatches
+        diagnoseSchemaIssues();
+        
         // Auto-refresh the database overview to show current state
         setTimeout(() => refreshDatabaseOverview(), 100);
       } else {
@@ -1722,6 +1928,8 @@ SELECT * FROM \${tableName} LIMIT 10;\`;
 
   // Add improved SQL parsing function
   function parseSQL(sql) {
+    addDebugInfo("Parsing SQL statements from: " + sql.substring(0, 200) + "...");
+    
     // Remove comments and normalize
     let cleanSQL = sql
       .replace(/--.*$/gm, '') // Remove line comments
@@ -1772,13 +1980,76 @@ SELECT * FROM \${tableName} LIMIT 10;\`;
       statements.push(trimmed + (trimmed.endsWith(';') ? '' : ';'));
     }
     
-    return statements.filter(stmt => {
+    const filteredStatements = statements.filter(stmt => {
       const cleaned = stmt.trim();
       return cleaned.length > 0 && 
              !cleaned.match(/^\\s*$/) && 
              !cleaned.match(/^-+\\s*$/) &&
              cleaned.match(/^(CREATE|INSERT|UPDATE|DELETE|DROP|ALTER)/i);
     });
+    
+    addDebugInfo("Parsed " + filteredStatements.length + " SQL statements:");
+    filteredStatements.forEach((stmt, index) => {
+      addDebugInfo("Statement " + (index + 1) + ": " + stmt.substring(0, 100) + "...");
+    });
+    
+    return filteredStatements;
+  }
+
+  // Add function to diagnose schema differences
+  function diagnoseSchemaIssues() {
+    if (!db || !currentDatabase) {
+      addDebugInfo("Cannot diagnose: database or original schema not available");
+      return;
+    }
+    
+    addDebugInfo("=== SCHEMA DIAGNOSIS ===");
+    
+    try {
+      // Get actual table structure from database
+      const tablesResult = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name;");
+      
+      if (tablesResult.length === 0) {
+        addDebugInfo("No tables found in actual database");
+        return;
+      }
+      
+      addDebugInfo("Tables in actual database: " + tablesResult[0].values.map(row => row[0]).join(', '));
+      
+      // Analyze each table
+      tablesResult[0].values.forEach(tableRow => {
+        const tableName = tableRow[0];
+        addDebugInfo("--- Analyzing table: " + tableName + " ---");
+        
+        try {
+          const schemaResult = db.exec("PRAGMA table_info(" + tableName + ");");
+          if (schemaResult.length > 0) {
+            addDebugInfo("Actual columns in " + tableName + ":");
+            schemaResult[0].values.forEach(col => {
+              const columnName = col[1];
+              const columnType = col[2];
+              addDebugInfo("  " + columnName + " (" + columnType + ")");
+            });
+          }
+        } catch (e) {
+          addDebugInfo("Error getting schema for " + tableName + ": " + e.message);
+        }
+      });
+      
+      // Check what the original schema intended
+      addDebugInfo("--- Original Schema Analysis ---");
+      const createStatements = currentDatabase.match(/CREATE TABLE[^;]+;/gi);
+      if (createStatements) {
+        createStatements.forEach(stmt => {
+          addDebugInfo("Original CREATE: " + stmt.substring(0, 150) + "...");
+        });
+      }
+      
+    } catch (error) {
+      addDebugInfo("Error during schema diagnosis: " + error.message);
+    }
+    
+    addDebugInfo("=== END SCHEMA DIAGNOSIS ===");
   }
 
   // Initialize everything when the page loads
