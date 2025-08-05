@@ -615,6 +615,24 @@ SELECT * FROM customers LIMIT 5;</textarea>
           </div>
         </div>
 
+        <!-- Coaching Panel -->
+        <div id="coachingPanel" class="error-panel bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg overflow-hidden">
+          <div class="p-4">
+            <div class="flex items-start justify-between mb-3">
+              <div class="flex items-center space-x-2">
+                <i class="fas fa-graduation-cap text-blue-600"></i>
+                <h4 class="font-medium text-blue-800">SQL Coaching Assistant</h4>
+              </div>
+              <button id="dismissCoaching" class="text-blue-600 hover:text-blue-800">
+                <i class="fas fa-times"></i>
+              </button>
+            </div>
+            <div id="coachingContent" class="text-sm">
+              <!-- Coaching content will be inserted here -->
+            </div>
+          </div>
+        </div>
+
         <!-- Status/Info Panel -->
         <div class="bg-white rounded-lg shadow-sm border border-gray-200">
           <div class="p-4 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-pink-50">
@@ -668,6 +686,158 @@ SELECT * FROM customers LIMIT 5;</textarea>
     }
   }
 
+  // Function to get coaching response for SQL errors
+  async function getCoachingResponse(errorDetails) {
+    try {
+      addDebugInfo('Requesting coaching response for error: ' + errorDetails.errorMessage);
+      
+      // Show that we're getting help
+      updateStatus('Getting help for your SQL error...');
+      
+      const response = await fetch('/api/coaching-response', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(errorDetails)
+      });
+
+      if (!response.ok) {
+        throw new Error('Coaching service unavailable (HTTP ' + response.status + ')');
+      }
+
+      const coachingData = await response.json();
+      addDebugInfo('Coaching response received: ' + coachingData.explanation?.substring(0, 100) + '...');
+      
+      if (coachingData.explanation) {
+        showCoachingResponse(coachingData, errorDetails);
+        updateStatus('Error analysis complete - check the coaching panel for help!');
+      } else {
+        addDebugInfo('No explanation provided in coaching response');
+        updateStatus('Query execution failed - coaching unavailable');
+      }
+      
+    } catch (coachingError) {
+      addDebugInfo('Error getting coaching response: ' + coachingError.message);
+      console.error('Coaching error:', coachingError);
+      updateStatus('Query execution failed - coaching service unavailable');
+    }
+  }
+
+  // Function to display coaching response in UI
+  function showCoachingResponse(coachingData, errorDetails) {
+    const coachingPanel = document.getElementById('coachingPanel');
+    const coachingContent = document.getElementById('coachingContent');
+    
+    if (!coachingPanel || !coachingContent) {
+      addDebugInfo('Coaching panel elements not found in DOM');
+      return;
+    }
+    
+    // Build coaching content
+    let content = '<div class="space-y-4">';
+    
+    // Error summary
+    content += '<div class="bg-red-50 border border-red-200 rounded-lg p-3">';
+    content += '<h4 class="font-medium text-red-800 mb-2"><i class="fas fa-exclamation-triangle mr-2"></i>Error Details</h4>';
+    content += '<p class="text-sm text-red-700"><strong>Query:</strong> <code class="bg-red-100 px-1 rounded">' + escapeHtml(errorDetails.query) + '</code></p>';
+    content += '<p class="text-sm text-red-700 mt-1"><strong>Error:</strong> ' + escapeHtml(errorDetails.errorMessage) + '</p>';
+    
+    // Add location information if available
+    if (errorDetails.location && (errorDetails.location.line || errorDetails.location.column)) {
+      content += '<div class="mt-2 p-2 bg-red-100 rounded">';
+      content += '<p class="text-xs font-medium text-red-800"><i class="fas fa-map-marker-alt mr-1"></i>Error Location:</p>';
+      if (errorDetails.location.line) {
+        content += '<p class="text-xs text-red-700">Line: ' + errorDetails.location.line + '</p>';
+      }
+      if (errorDetails.location.column) {
+        content += '<p class="text-xs text-red-700">Column: ' + errorDetails.location.column + '</p>';
+      }
+      if (errorDetails.location.context) {
+        content += '<p class="text-xs text-red-700">Context: <code class="bg-red-200 px-1 rounded">' + escapeHtml(errorDetails.location.context) + '</code></p>';
+      }
+      content += '</div>';
+    }
+    
+    // Add query analysis if available
+    if (errorDetails.queryAnalysis) {
+      content += '<div class="mt-2 text-xs text-red-600">';
+      content += '<p>Query has ' + errorDetails.queryAnalysis.totalLines + ' lines, ' + errorDetails.queryAnalysis.totalCharacters + ' characters</p>';
+      if (errorDetails.queryAnalysis.keywords.length > 0) {
+        content += '<p>Keywords found: ' + errorDetails.queryAnalysis.keywords.join(', ') + '</p>';
+      }
+      if (errorDetails.queryAnalysis.tables.length > 0) {
+        content += '<p>Tables referenced: ' + errorDetails.queryAnalysis.tables.join(', ') + '</p>';
+      }
+      content += '</div>';
+    }
+    
+    content += '</div>';
+    
+    // Coaching explanation
+    content += '<div class="bg-blue-50 border border-blue-200 rounded-lg p-3">';
+    content += '<h4 class="font-medium text-blue-800 mb-2"><i class="fas fa-graduation-cap mr-2"></i>Explanation & Help</h4>';
+    content += '<div class="text-sm text-blue-700 whitespace-pre-wrap">' + escapeHtml(coachingData.explanation) + '</div>';
+    content += '</div>';
+    
+    // Suggested fix if provided
+    if (coachingData.suggestedFix) {
+      content += '<div class="bg-green-50 border border-green-200 rounded-lg p-3">';
+      content += '<h4 class="font-medium text-green-800 mb-2"><i class="fas fa-lightbulb mr-2"></i>Suggested Fix</h4>';
+      content += '<pre class="text-sm text-green-700 bg-green-100 p-2 rounded overflow-x-auto"><code>' + escapeHtml(coachingData.suggestedFix) + '</code></pre>';
+      
+      // Add button to apply suggested fix
+      content += '<button id="applySuggestedFix" class="mt-2 bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm">';
+      content += '<i class="fas fa-magic mr-1"></i>Apply This Fix';
+      content += '</button>';
+      content += '</div>';
+    }
+    
+    // Additional tips if provided
+    if (coachingData.tips && coachingData.tips.length > 0) {
+      content += '<div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3">';
+      content += '<h4 class="font-medium text-yellow-800 mb-2"><i class="fas fa-star mr-2"></i>Tips for Next Time</h4>';
+      content += '<ul class="text-sm text-yellow-700 list-disc list-inside space-y-1">';
+      coachingData.tips.forEach(tip => {
+        content += '<li>' + escapeHtml(tip) + '</li>';
+      });
+      content += '</ul>';
+      content += '</div>';
+    }
+    
+    content += '</div>';
+    
+    coachingContent.innerHTML = content;
+    
+    // Add event listener for suggested fix button
+    if (coachingData.suggestedFix) {
+      const applyButton = document.getElementById('applySuggestedFix');
+      if (applyButton) {
+        applyButton.addEventListener('click', function() {
+          sqlEditor.setValue(coachingData.suggestedFix);
+          updateStatus('Suggested fix applied to editor - you can now run the corrected query!');
+          addDebugInfo('Applied suggested fix from coaching response');
+          
+          // Change button to show it was applied
+          this.innerHTML = '<i class="fas fa-check mr-1"></i>Fix Applied!';
+          this.className = 'mt-2 bg-green-500 text-white px-3 py-1 rounded text-sm cursor-default';
+          this.disabled = true;
+        });
+      }
+    }
+    
+    // Show the coaching panel
+    coachingPanel.classList.add('show');
+    addDebugInfo('Coaching response displayed in UI');
+  }
+
+  // Helper function to escape HTML
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
   function showError(message) {
     const errorPanel = document.getElementById('errorPanel');
     const errorMessage = document.getElementById('errorMessage');
@@ -704,6 +874,115 @@ SELECT * FROM customers LIMIT 5;</textarea>
     if (loadingPopup) {
       loadingPopup.classList.remove('show');
     }
+  }
+
+  // Function to parse SQL error for line/column information
+  function parseErrorLocation(errorMessage, query) {
+    const errorInfo = {
+      line: null,
+      column: null,
+      context: null,
+      parsedMessage: errorMessage
+    };
+    
+    // Common SQL.js error patterns
+    const patterns = [
+      // "near "something": syntax error" pattern
+      /near "([^"]+)": (.+)/i,
+      // "no such table: tablename" pattern
+      /no such table: (\w+)/i,
+      // "no such column: columnname" pattern  
+      /no such column: (\w+)/i,
+      // Generic "syntax error" pattern
+      /syntax error/i
+    ];
+    
+    let matchedPattern = null;
+    let matchedText = null;
+    
+    for (const pattern of patterns) {
+      const match = errorMessage.match(pattern);
+      if (match) {
+        matchedPattern = pattern;
+        matchedText = match[1] || match[0];
+        break;
+      }
+    }
+    
+    if (matchedText && query) {
+      // Try to find the problematic text in the query
+      const lines = query.split('\\n');
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const index = line.toLowerCase().indexOf(matchedText.toLowerCase());
+        if (index !== -1) {
+          errorInfo.line = i + 1;
+          errorInfo.column = index + 1;
+          errorInfo.context = line.trim();
+          break;
+        }
+      }
+    }
+    
+    return errorInfo;
+  }
+
+  // Enhanced error capture for coaching
+  function captureEnhancedErrorDetails(error, query) {
+    const errorLocation = parseErrorLocation(error.message, query);
+    
+    const errorDetails = {
+      query: query,
+      errorMessage: error.message,
+      errorType: error.name || 'SQLError',
+      timestamp: new Date().toISOString(),
+      location: {
+        line: errorLocation.line,
+        column: errorLocation.column,
+        context: errorLocation.context
+      }
+    };
+    
+    // Add query analysis
+    const queryLines = query.split('\\n');
+    errorDetails.queryAnalysis = {
+      totalLines: queryLines.length,
+      totalCharacters: query.length,
+      keywords: extractSQLKeywords(query),
+      tables: extractTableNames(query)
+    };
+    
+    return errorDetails;
+  }
+  
+  // Helper function to extract SQL keywords
+  function extractSQLKeywords(query) {
+    const keywords = ['SELECT', 'FROM', 'WHERE', 'JOIN', 'INSERT', 'UPDATE', 'DELETE', 'CREATE', 'DROP', 'ALTER', 'ORDER BY', 'GROUP BY', 'HAVING'];
+    const foundKeywords = [];
+    const upperQuery = query.toUpperCase();
+    
+    keywords.forEach(keyword => {
+      if (upperQuery.includes(keyword)) {
+        foundKeywords.push(keyword);
+      }
+    });
+    
+    return foundKeywords;
+  }
+  
+  // Helper function to extract table names from query
+  function extractTableNames(query) {
+    const tablePattern = /(?:FROM|JOIN|UPDATE|INTO)\\s+([\\w]+)/gi;
+    const tables = [];
+    let match;
+    
+    while ((match = tablePattern.exec(query)) !== null) {
+      if (!tables.includes(match[1])) {
+        tables.push(match[1]);
+      }
+    }
+    
+    return tables;
   }
 
   function executeQuery() {
@@ -776,7 +1055,55 @@ SELECT * FROM customers LIMIT 5;</textarea>
     } catch (error) {
       console.error("SQL Query Error:", error);
       addDebugInfo('Query error: ' + error.message);
-      showError('SQL Error: ' + error.message);
+      
+      // Enhanced error capture for coaching
+      const errorDetails = captureEnhancedErrorDetails(error, query);
+      
+      // Get current database schema for context
+      let schemaInfo = null;
+      try {
+        const tablesResult = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name;");
+        if (tablesResult.length > 0) {
+          schemaInfo = {};
+          for (const tableRow of tablesResult[0].values) {
+            const tableName = tableRow[0];
+            try {
+              const schemaResult = db.exec("PRAGMA table_info(" + tableName + ");");
+              if (schemaResult.length > 0) {
+                schemaInfo[tableName] = schemaResult[0].values.map(col => ({
+                  name: col[1],
+                  type: col[2],
+                  notNull: col[3],
+                  defaultValue: col[4],
+                  primaryKey: col[5]
+                }));
+              }
+            } catch (schemaError) {
+              addDebugInfo('Error getting schema for table ' + tableName + ': ' + schemaError.message);
+            }
+          }
+        }
+      } catch (schemaError) {
+        addDebugInfo('Error getting database schema: ' + schemaError.message);
+      }
+      
+      errorDetails.schema = schemaInfo;
+      
+      // Create enhanced error message with location info
+      let enhancedErrorMessage = error.message;
+      if (errorDetails.location.line && errorDetails.location.column) {
+        enhancedErrorMessage += ' (Line ' + errorDetails.location.line + ', Column ' + errorDetails.location.column + ')';
+      }
+      if (errorDetails.location.context) {
+        enhancedErrorMessage += '\\nProblem near: ' + errorDetails.location.context;
+      }
+      
+      // Show enhanced error first
+      showError('SQL Error: ' + enhancedErrorMessage);
+      
+      // Try to get coaching response
+      getCoachingResponse(errorDetails);
+      
       updateStatus('Query execution failed');
     } finally {
       btn.innerHTML = originalHTML;
@@ -1459,6 +1786,14 @@ SELECT * FROM customers LIMIT 5;</textarea>
 
     // Error handling
     document.getElementById('dismissError').addEventListener('click', hideError);
+    
+    // Coaching panel handling
+    document.getElementById('dismissCoaching').addEventListener('click', function() {
+      const coachingPanel = document.getElementById('coachingPanel');
+      if (coachingPanel) {
+        coachingPanel.classList.remove('show');
+      }
+    });
 document.getElementById('loadToEditorBtn').addEventListener('click', function() {
     if (currentDatabase && sqlEditor) {
         // Load the database creation code into the editor
