@@ -655,8 +655,14 @@ SELECT * FROM customers LIMIT 5;</textarea>
   <div id="loadingPopup" class="loading-popup">
     <div class="loading-content">
       <div class="loading-spinner"></div>
-      <h3 class="text-lg font-semibold text-gray-900 mb-2">Database Loading</h3>
-      <p class="text-gray-600" id="loadingMessage">Loading schema...</p>
+      <h3 class="text-lg font-semibold text-gray-900 mb-2">Generating Database</h3>
+      <p class="text-gray-600" id="loadingMessage">One moment while I generate your custom SQL database...</p>
+      <div id="progressContainer" class="mt-4" style="display: none;">
+        <div class="w-full bg-gray-200 rounded-full h-3">
+          <div id="progressBar" class="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-500 ease-out" style="width: 0%"></div>
+        </div>
+        <p class="text-sm text-gray-600 mt-2 text-center font-medium" id="progressText">0%</p>
+      </div>
     </div>
   </div>
 
@@ -857,15 +863,34 @@ SELECT * FROM customers LIMIT 5;</textarea>
     }
   }
 
-  function showLoadingPopup(message = 'Loading schema...') {
+  function showLoadingPopup(message = 'One moment while I generate your custom SQL database...', showProgress = false) {
     const loadingPopup = document.getElementById('loadingPopup');
     const loadingMessage = document.getElementById('loadingMessage');
+    const progressContainer = document.getElementById('progressContainer');
     
     if (loadingMessage) {
       loadingMessage.textContent = message;
     }
+    
+    if (progressContainer) {
+      progressContainer.style.display = showProgress ? 'block' : 'none';
+    }
+    
     if (loadingPopup) {
       loadingPopup.classList.add('show');
+    }
+  }
+
+  function updateLoadingProgress(percentage, text = '') {
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+    
+    if (progressBar) {
+      progressBar.style.width = percentage + '%';
+    }
+    
+    if (progressText) {
+      progressText.textContent = text || percentage + '%';
     }
   }
 
@@ -874,6 +899,10 @@ SELECT * FROM customers LIMIT 5;</textarea>
     if (loadingPopup) {
       loadingPopup.classList.remove('show');
     }
+  }
+
+  function hideLoading() {
+    hideLoadingPopup();
   }
 
   // Function to parse SQL error for line/column information
@@ -1756,82 +1785,107 @@ SELECT * FROM customers LIMIT 5;</textarea>
   // Setup all event listeners
   function setupEventListeners() {
     // Debug functionality
-    document.getElementById('showDebugBtn').addEventListener('click', function() {
-      document.getElementById('debugPanel').classList.add('show');
-    });
+    const showDebugBtn = document.getElementById('showDebugBtn');
+    if (showDebugBtn) {
+      showDebugBtn.addEventListener('click', function() {
+        document.getElementById('debugPanel').classList.add('show');
+      });
+    }
     
-    document.getElementById('hideDebugBtn').addEventListener('click', function() {
-      document.getElementById('debugPanel').classList.remove('show');
-    });
+    const hideDebugBtn = document.getElementById('hideDebugBtn');
+    if (hideDebugBtn) {
+      hideDebugBtn.addEventListener('click', function() {
+        document.getElementById('debugPanel').classList.remove('show');
+      });
+    }
 
     // Hide results panel
-    document.getElementById('hideResultsBtn').addEventListener('click', function() {
-      document.getElementById('resultsPanel').classList.remove('show');
-    });
+    const hideResultsBtn = document.getElementById('hideResultsBtn');
+    if (hideResultsBtn) {
+      hideResultsBtn.addEventListener('click', function() {
+        document.getElementById('resultsPanel').classList.remove('show');
+      });
+    }
     
     // Generate Database Button Handler
-    document.getElementById('generateDatabaseBtn').addEventListener('click', generateAndLoadDatabase);
+    const generateDatabaseBtn = document.getElementById('generateDatabaseBtn');
+    if (generateDatabaseBtn) {
+      generateDatabaseBtn.addEventListener('click', generateAndLoadDatabase);
+    }
 
     // SQL Editor buttons
-    document.getElementById('runQueryBtn').addEventListener('click', executeQuery);
-    document.getElementById('formatBtn').addEventListener('click', formatSQL);
-    document.getElementById('clearBtn').addEventListener('click', clearEditor);
+    const runQueryBtn = document.getElementById('runQueryBtn');
+    if (runQueryBtn) {
+      runQueryBtn.addEventListener('click', executeQuery);
+    }
     
-    // Add reload database button event listener
-    document.getElementById('reloadDbBtn').addEventListener('click', reloadDatabaseFromEditor);
+    const formatBtn = document.getElementById('formatBtn');
+    if (formatBtn) {
+      formatBtn.addEventListener('click', formatSQL);
+    }
+    
+    const clearBtn = document.getElementById('clearBtn');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', clearEditor);
+    }
 
     // Database panel buttons
-    document.getElementById('copyDatabaseBtn').addEventListener('click', copyDatabaseToClipboard);
-    document.getElementById('loadToEditorBtn').addEventListener('click', loadDatabaseToEditor);
+    const copyDatabaseBtn = document.getElementById('copyDatabaseBtn');
+    if (copyDatabaseBtn) {
+      copyDatabaseBtn.addEventListener('click', copyDatabaseToClipboard);
+    }
+    
+    const loadToEditorBtn = document.getElementById('loadToEditorBtn');
+    if (loadToEditorBtn) {
+      loadToEditorBtn.addEventListener('click', loadDatabaseToEditor);
+    }
 
     // Error handling
-    document.getElementById('dismissError').addEventListener('click', hideError);
+    const dismissError = document.getElementById('dismissError');
+    if (dismissError) {
+      dismissError.addEventListener('click', hideError);
+    }
     
     // Coaching panel handling
-    document.getElementById('dismissCoaching').addEventListener('click', function() {
-      const coachingPanel = document.getElementById('coachingPanel');
-      if (coachingPanel) {
-        coachingPanel.classList.remove('show');
-      }
-    });
-document.getElementById('loadToEditorBtn').addEventListener('click', function() {
-    if (currentDatabase && sqlEditor) {
-        // Load the database creation code into the editor
-        sqlEditor.setValue(currentDatabase);
-        
-        // Show success message
-        updateStatus('Database creation code loaded into editor');
-        addDebugInfo('Database loaded to editor successfully');
-        
-        // Optional: Focus the editor
-        sqlEditor.focus();
-        
-        // Optional: Scroll to top of editor
-        sqlEditor.setCursor(0, 0);
-    } else {
-        showError('No database available to load or editor not initialized');
+    const dismissCoaching = document.getElementById('dismissCoaching');
+    if (dismissCoaching) {
+      dismissCoaching.addEventListener('click', function() {
+        const coachingPanel = document.getElementById('coachingPanel');
+        if (coachingPanel) {
+          coachingPanel.classList.remove('show');
+        }
+      });
     }
-});
 
     // Database panel controls
-    document.getElementById('collapseDatabase').addEventListener('click', function() {
-      const content = document.getElementById('databaseContent');
-      const icon = this.querySelector('i');
-      
-      if (content.style.display === 'none') {
-        content.style.display = 'block';
-        icon.className = 'fas fa-chevron-up';
-      } else {
-        content.style.display = 'none';
-        icon.className = 'fas fa-chevron-down';
-      }
-    });
+    const collapseDatabase = document.getElementById('collapseDatabase');
+    if (collapseDatabase) {
+      collapseDatabase.addEventListener('click', function() {
+        const content = document.getElementById('databaseContent');
+        const icon = this.querySelector('i');
+        
+        if (content && icon) {
+          if (content.style.display === 'none') {
+            content.style.display = 'block';
+            icon.className = 'fas fa-chevron-up';
+          } else {
+            content.style.display = 'none';
+            icon.className = 'fas fa-chevron-down';
+          }
+        }
+      });
+    }
 
     // Mobile toggle
-    document.getElementById('toggleSchema').addEventListener('click', function() {
-      const panel = document.getElementById('schemaPanel');
-      panel.classList.toggle('collapsed');
-    });
+    const toggleSchema = document.getElementById('toggleSchema');
+    if (toggleSchema) {
+      toggleSchema.addEventListener('click', function() {
+        const panel = document.getElementById('schemaPanel');
+        if (panel) {
+          panel.classList.toggle('collapsed');
+        }
+      });
+    }
   }
 
   // Generate database and load it into the database
@@ -1856,11 +1910,19 @@ document.getElementById('loadToEditorBtn').addEventListener('click', function() 
       btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Generating...</span>';
       btn.disabled = true;
 
-      showLoadingPopup('Generating SQL database...');
-      updateStatus('Generating SQL database...');
+      showLoadingPopup('One moment while I generate your custom SQL database...', true);
+      updateLoadingProgress(5, 'Initializing database generation...');
+      updateStatus('Generating your custom SQL database...');
       updateDatabaseStatus('loading');
 
+      // Add small delay to show first stage
+      await new Promise(resolve => setTimeout(resolve, 300));
+      updateLoadingProgress(10, 'Connecting to AI service...');
+
       try {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        updateLoadingProgress(15, 'Preparing your request...');
+        
         const response = await fetch('/generate-schema', {
           method: 'POST',
           headers: {
@@ -1869,12 +1931,20 @@ document.getElementById('loadToEditorBtn').addEventListener('click', function() 
           body: JSON.stringify({ prompt })
         });
 
+        updateLoadingProgress(25, 'Request sent - waiting for AI response...');
+        await new Promise(resolve => setTimeout(resolve, 300));
+        updateLoadingProgress(35, 'AI is analyzing your requirements...');
+
         if (!response.ok) {
           throw new Error("HTTP error! status: " + response.status);
         }
 
+        updateLoadingProgress(45, 'Receiving database schema...');
         const data = await response.json();
         addDebugInfo("API response received. Source: " + data.source);
+
+        await new Promise(resolve => setTimeout(resolve, 200));
+        updateLoadingProgress(55, 'Database schema received successfully!');
 
         if (data.error) {
           addDebugInfo("API Error: " + data.error);
@@ -1886,19 +1956,32 @@ document.getElementById('loadToEditorBtn').addEventListener('click', function() 
           addDebugInfo("Source: " + data.source);
           addDebugInfo("Database preview: " + data.database.substring(0, 500) + "...");
           
+          await new Promise(resolve => setTimeout(resolve, 200));
+          updateLoadingProgress(65, 'Validating database structure...');
+          
           // Clean the database before processing
-          showLoadingPopup('Loading schema into database...');
           const cleanedDatabase = cleanGeneratedDatabase(data.database);
           addDebugInfo('Database cleaned and ready for loading');
           addDebugInfo('Cleaned database preview: ' + cleanedDatabase.substring(0, 500) + "...");
           
+          await new Promise(resolve => setTimeout(resolve, 200));
+          updateLoadingProgress(75, 'Creating database tables...');
+          
           // Store the original database globally BEFORE cleaning
           currentDatabase = data.database;
           
+          await new Promise(resolve => setTimeout(resolve, 300));
+          updateLoadingProgress(85, 'Loading data into tables...');
           await loadDatabaseIntoDatabase(cleanedDatabase);
+          
+          await new Promise(resolve => setTimeout(resolve, 200));
+          updateLoadingProgress(92, 'Building database overview...');
           
           // Refresh database overview with current state
           refreshDatabaseOverview();
+          
+          await new Promise(resolve => setTimeout(resolve, 200));
+          updateLoadingProgress(96, 'Setting up SQL editor...');
           
           // Set a clean query editor with helpful comments instead of showing the schema SQL
           sqlEditor.setValue(\`-- Write your SQL queries here
@@ -1910,11 +1993,14 @@ document.getElementById('loadToEditorBtn').addEventListener('click', function() 
 
 \`);
 
+          await new Promise(resolve => setTimeout(resolve, 300));
+          updateLoadingProgress(100, 'Database ready! You can now run SQL queries.');
+
           if (data.source === 'claude-api') {
-            updateStatus('SQL database generated and loaded successfully using Claude AI');
+            updateStatus('Custom SQL database generated and loaded successfully using Claude AI');
             addDebugInfo('Successfully used Claude API and loaded database into database');
           } else {
-            updateStatus('Using mock database and loaded into database (Claude API unavailable)');
+            updateStatus('Custom database created and loaded (Claude AI unavailable - using fallback)');
             addDebugInfo('Used fallback database and loaded into database');
           }
 
@@ -1929,6 +2015,9 @@ document.getElementById('loadToEditorBtn').addEventListener('click', function() 
         updateStatus('Database generation failed');
         updateDatabaseStatus('error');
       } finally {
+        // Add a small delay to let users see the completion
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
         // Reset button
         btn.innerHTML = originalHTML;
         btn.disabled = false;
@@ -1948,7 +2037,7 @@ async function generateDatabase() {
         return;
     }
 
-    showLoading('Generating database schema...');
+    showLoading('One moment while I generate your custom SQL database...');
     addDebugInfo('Starting database generation for prompt: ' + prompt);
 
     try {
@@ -2028,9 +2117,15 @@ document.getElementById('copyDatabaseBtn').addEventListener('click', async funct
 function showLoading(message) {
     const loadingPopup = document.getElementById('loadingPopup');
     const loadingMessage = document.getElementById('loadingMessage');
+    const progressContainer = document.getElementById('progressContainer');
     
     if (loadingMessage) {
-        loadingMessage.textContent = message || 'Loading...';
+        loadingMessage.textContent = message || 'One moment while I generate your custom SQL database...';
+    }
+    
+    // Hide progress bar for simple loading
+    if (progressContainer) {
+        progressContainer.style.display = 'none';
     }
     
     if (loadingPopup) {
@@ -2055,9 +2150,21 @@ document.getElementById('generateDatabaseBtn').addEventListener('click', generat
   }
 
   function loadDatabaseToEditor() {
-    if (currentDatabase) {
+    if (currentDatabase && sqlEditor) {
+      // Load the database creation code into the editor
       sqlEditor.setValue(currentDatabase);
-      updateStatus('Database SQL loaded to editor');
+      
+      // Show success message
+      updateStatus('Database creation code loaded into editor');
+      addDebugInfo('Database loaded to editor successfully');
+      
+      // Optional: Focus the editor
+      sqlEditor.focus();
+      
+      // Optional: Scroll to top of editor
+      sqlEditor.setCursor(0, 0);
+    } else {
+      showError('No database available to load or editor not initialized');
     }
   }
 
