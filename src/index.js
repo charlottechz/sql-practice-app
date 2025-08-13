@@ -1218,107 +1218,67 @@ SELECT * FROM customers LIMIT 5;</textarea>
     rowCount.textContent = totalRows + ' rows (' + resultsWithData.length + ' queries)';
     queryTime.textContent = executionTime + 'ms';
 
-    addDebugInfo('Creating headers for multiple queries...');
+    addDebugInfo('Creating separate headers and data for each query...');
 
-    // Create a special header to indicate multiple queries
-    const queryHeaderTh = document.createElement('th');
-    queryHeaderTh.className = 'px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-blue-50';
-    queryHeaderTh.textContent = 'Query #';
-    resultsHeader.appendChild(queryHeaderTh);
-    addDebugInfo('Added Query # header');
-
-    // Find the maximum number of columns across all results and collect all unique column names
-    const maxColumns = Math.max(...resultsWithData.map(item => item.result.columns.length));
-    const allColumnNames = new Set();
-    
-    // Collect all unique column names from all queries
-    resultsWithData.forEach(item => {
-      item.result.columns.forEach(col => allColumnNames.add(col));
-    });
-    
-    // Convert to array and take the first maxColumns or pad with generic names
-    const columnNames = Array.from(allColumnNames).slice(0, maxColumns);
-    
-    // If we don't have enough unique column names, use the first result's columns and pad
-    const firstResult = resultsWithData[0].result;
-    const headerColumns = [];
-    
-    for (let i = 0; i < maxColumns; i++) {
-      if (i < firstResult.columns.length) {
-        headerColumns.push(firstResult.columns[i]);
-      } else if (i < columnNames.length) {
-        headerColumns.push(columnNames[i]);
-      } else {
-        headerColumns.push('Column ' + (i + 1));
-      }
-    }
-
-    addDebugInfo('Header columns: ' + headerColumns.join(', '));
-
-    // Create headers
-    headerColumns.forEach((columnName, index) => {
-      const th = document.createElement('th');
-      th.className = 'px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider';
-      th.textContent = columnName;
-      resultsHeader.appendChild(th);
-      addDebugInfo('Added header ' + (index + 1) + ': ' + columnName);
-    });
-
-    addDebugInfo('Headers created, now creating data rows for ' + resultsWithData.length + ' queries');
-
-    // Create rows for each query result
+    // Create results for each query separately
     resultsWithData.forEach((item, resultIndex) => {
       const result = item.result;
       const queryIndex = item.queryIndex;
       
-      addDebugInfo('Processing query ' + queryIndex + ' with ' + result.values.length + ' rows');
+      addDebugInfo('Processing query ' + queryIndex + ' with ' + result.values.length + ' rows and columns: ' + result.columns.join(', '));
       
-      // Add a separator row if this is not the first result
-      if (resultIndex > 0) {
-        const separatorTr = document.createElement('tr');
-        separatorTr.className = 'bg-gray-100';
-        
-        const separatorTd = document.createElement('td');
-        separatorTd.className = 'px-6 py-2 text-center text-xs font-medium text-gray-600';
-        separatorTd.colSpan = maxColumns + 1;
-        separatorTd.textContent = '--- Results from Query ' + queryIndex + ' (' + result.values.length + ' rows) ---';
-        separatorTr.appendChild(separatorTd);
-        resultsBody.appendChild(separatorTr);
-        addDebugInfo('Added separator for query ' + queryIndex);
-      }
+      // Add a query separator header row
+      const separatorTr = document.createElement('tr');
+      separatorTr.className = 'bg-gradient-to-r from-blue-100 to-blue-50';
+      
+      const separatorTd = document.createElement('td');
+      separatorTd.className = 'px-6 py-3 text-center text-sm font-bold text-blue-800 border-b-2 border-blue-200';
+      separatorTd.colSpan = result.columns.length;
+      separatorTd.innerHTML = '<i class="fas fa-database mr-2"></i>Query ' + queryIndex + ' Results (' + result.values.length + ' rows)';
+      separatorTr.appendChild(separatorTd);
+      resultsBody.appendChild(separatorTr);
+      
+      // Create header row for this specific query
+      const headerTr = document.createElement('tr');
+      headerTr.className = 'bg-gray-50';
+      
+      result.columns.forEach((column) => {
+        const th = document.createElement('th');
+        th.className = 'px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200';
+        th.textContent = column;
+        headerTr.appendChild(th);
+        addDebugInfo('Added header for query ' + queryIndex + ': ' + column);
+      });
+      
+      resultsBody.appendChild(headerTr);
 
-      // Create rows for this query's data
+      // Create data rows for this query
       result.values.forEach((row, rowIndex) => {
         const tr = document.createElement('tr');
+        tr.className = rowIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50';
         
-        // Add query number in first column (only for first row of each query)
-        const queryTd = document.createElement('td');
-        queryTd.className = 'px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600 bg-blue-50';
-        if (rowIndex === 0) {
-          queryTd.textContent = 'Q' + queryIndex;
-        } else {
-          queryTd.textContent = '';
-        }
-        tr.appendChild(queryTd);
-        
-        // Add data cells
-        for (let colIndex = 0; colIndex < maxColumns; colIndex++) {
+        row.forEach((cell, cellIndex) => {
           const td = document.createElement('td');
-          td.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-900';
-          
-          if (colIndex < row.length) {
-            td.textContent = row[colIndex] !== null ? row[colIndex] : 'NULL';
-          } else {
-            td.textContent = '-';
-            td.className += ' text-gray-400';
-          }
+          td.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-b border-gray-100';
+          td.textContent = cell !== null ? cell : 'NULL';
           tr.appendChild(td);
-        }
+        });
         resultsBody.appendChild(tr);
       });
+      
+      // Add spacing between query results (except for the last one)
+      if (resultIndex < resultsWithData.length - 1) {
+        const spacerTr = document.createElement('tr');
+        const spacerTd = document.createElement('td');
+        spacerTd.className = 'py-2';
+        spacerTd.colSpan = result.columns.length;
+        spacerTd.innerHTML = '&nbsp;';
+        spacerTr.appendChild(spacerTd);
+        resultsBody.appendChild(spacerTr);
+      }
     });
     
-    addDebugInfo('Multiple query results displayed: ' + resultsWithData.length + ' queries with total ' + totalRows + ' rows');
+    addDebugInfo('Multiple query results displayed: ' + resultsWithData.length + ' queries with individual headers and total ' + totalRows + ' rows');
   }
 
   function displayEmptyResults(executionTime) {
