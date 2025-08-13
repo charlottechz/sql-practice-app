@@ -117,7 +117,7 @@ export default {
             },
             body: JSON.stringify({
               model: 'claude-3-5-sonnet-20241022',  
-              max_tokens: 2000,
+              max_tokens: 5000,  
               messages: [{
                 role: 'user',
                 content: `Generate a complete SQL database based on this description: "${prompt}". 
@@ -126,8 +126,11 @@ export default {
           1. CREATE TABLE statements with appropriate data types (use SQLite syntax - INTEGER, TEXT, REAL, BLOB)
           2. Primary keys using INTEGER PRIMARY KEY AUTOINCREMENT
           3. Foreign keys and constraints where appropriate
-          4. Sample INSERT statements with realistic data (5-10 rows per table)
+          4. Sample INSERT statements with realistic data (MINIMUM 20 rows per table - this is required!)
           5. Comments explaining the database design
+          
+          IMPORTANT: Each table MUST have at least 20 rows of sample data. This is critical for meaningful SQL practice.
+          Use varied, realistic data that represents different scenarios and edge cases.
           
           Make sure the database is production-ready with proper normalization and relationships. 
           Format the output as clean, executable SQLite SQL that can be run in sql.js.
@@ -537,14 +540,6 @@ SELECT * FROM customers LIMIT 5;</textarea>
               >
                 <i class="fas fa-play"></i>
                 <span>Run Query</span>
-              </button>
-              
-              <button
-                id="formatBtn"
-                class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium px-4 py-2 rounded-md transition-colors flex items-center space-x-2"
-              >
-                <i class="fas fa-indent"></i>
-                <span>Format SQL</span>
               </button>
               <button
                 id="clearBtn"
@@ -1858,6 +1853,7 @@ SELECT * FROM customers LIMIT 5;</textarea>
     }
 
     // Database panel controls
+
     const collapseDatabase = document.getElementById('collapseDatabase');
     if (collapseDatabase) {
       collapseDatabase.addEventListener('click', function() {
@@ -2070,8 +2066,12 @@ async function generateDatabase() {
             updateStatus('Database generated successfully with AI');
         }
 
-        // Load the database
-        await loadDatabase(data.database);
+        // Clean and load the database - FIXED: use the correct function name
+        const cleanedDatabase = cleanGeneratedDatabase(data.database);
+        await loadDatabaseIntoDatabase(cleanedDatabase);
+        
+        // Refresh database overview with current state
+        refreshDatabaseOverview();
         
         // Show the copy and load to editor buttons
         document.getElementById('copyDatabaseBtn').style.display = 'inline-block';
@@ -2170,7 +2170,7 @@ document.getElementById('generateDatabaseBtn').addEventListener('click', generat
 
   function selectTableForQuery(tableName) {
     const sampleQuery = \`-- Querying the \${tableName} table
-SELECT * FROM \${tableName} LIMIT 10;\`;
+SELECT * FROM \${tableName} LIMIT 20;\`;
     sqlEditor.setValue(sampleQuery);
     updateStatus(\`Sample query for \${tableName} loaded. You can modify and run it!\`);
   }
@@ -2244,6 +2244,8 @@ SELECT * FROM \${tableName} LIMIT 10;\`;
     const lines = cleaned.split('\\n');
     const sqlLines = [];
     let inSQLBlock = false;
+    let inSingleQuote = false;
+    let inDoubleQuote = false;
     
     for (let line of lines) {
       const trimmedLine = line.trim();
