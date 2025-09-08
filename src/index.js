@@ -664,26 +664,35 @@ SELECT * FROM customers LIMIT 5;</textarea>
             <div id="statusContent" class="text-sm text-gray-600">
               Initializing SQL.js database... Please wait.
             </div>
+            </div>
           </div>
         </div>
       </div>
     </div>
-  </div>
-
-  <!-- Loading Popup -->
-  <div id="loadingPopup" class="loading-popup">
-    <div class="loading-content">
-      <div class="loading-spinner"></div>
-      <h3 class="text-lg font-semibold text-gray-900 mb-2">Generating Database</h3>
-      <p class="text-gray-600" id="loadingMessage">One moment while I generate your custom SQL database...</p>
-      <div id="progressContainer" class="mt-4" style="display: none;">
-        <div class="w-full bg-gray-200 rounded-full h-3">
-          <div id="progressBar" class="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-500 ease-out" style="width: 0%"></div>
+  <!-- Footer with Attribution -->
+    <footer class="bg-white border-t border-gray-200 mt-12">
+      <div class="max-w-7xl mx-auto px-4 py-6">
+        <div class="text-center text-sm text-gray-500">
+          <p>Built by <a href="https://himanshiiportfolio.netlify.app/" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 hover:underline transition-colors">Himanshi Sheth</a></p>
+          <p class="mt-1">AI SQL Playground - Generate custom databases and practice SQL queries</p>
         </div>
-        <p class="text-sm text-gray-600 mt-2 text-center font-medium" id="progressText">0%</p>
+      </div>
+    </footer>
+    
+    <!-- Loading Popup -->
+    <div id="loadingPopup" class="loading-popup">
+      <div class="loading-content">
+        <div class="loading-spinner"></div>
+        <h3 class="text-lg font-semibold text-gray-900 mb-2">Generating Database</h3>
+        <p class="text-gray-600" id="loadingMessage">One moment while I generate your custom SQL database...</p>
+        <div id="progressContainer" class="mt-4" style="display: none;">
+          <div class="w-full bg-gray-200 rounded-full h-3">
+            <div id="progressBar" class="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-500 ease-out" style="width: 0%"></div>
+          </div>
+          <p class="text-sm text-gray-600 mt-2 text-center font-medium" id="progressText">0%</p>
+        </div>
       </div>
     </div>
-  </div>
 
   <script>
   // Global variables
