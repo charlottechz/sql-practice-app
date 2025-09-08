@@ -1,15 +1,13 @@
 function generateFallbackSchema(prompt) {
   // Simple fallback database for when the API is unavailable
-  return `-- Fallback SQL Database for: ${prompt}
--- Note: This is a simplified database created when the AI service is unavailable
-
+  return `-- Fallback SQL Database for: ${prompt} --
+Note: This is a simplified database created when the AI service is unavailable
 CREATE TABLE customers (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
   email TEXT UNIQUE NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
-
 CREATE TABLE orders (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   customer_id INTEGER NOT NULL,
@@ -18,19 +16,28 @@ CREATE TABLE orders (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (customer_id) REFERENCES customers(id)
 );
-
 -- Sample data
 INSERT INTO customers (id, name, email) VALUES
-(1, 'John Smith', 'john@example.com'),
-(2, 'Emma Johnson', 'emma@example.com'),
-(3, 'Michael Brown', 'michael@example.com');
-
+  (1, 'John Smith', 'john@example.com'),
+  (2, 'Emma Johnson', 'emma@example.com'),
+  (3, 'Michael Brown', 'michael@example.com');
 INSERT INTO orders (id, customer_id, total, status) VALUES
-(1001, 1, 129.99, 'completed'),
-(1002, 1, 249.95, 'completed'),
-(1003, 2, 67.50, 'processing'),
-(1004, 3, 89.99, 'processing'),
-(1005, 2, 67.50, 'completed');`;
+  (1001, 1, 129.99, 'completed'),
+  (1002, 1, 249.95, 'completed'),
+  (1003, 2, 67.50, 'processing'),
+  (1004, 3, 89.99, 'processing'),
+  (1005, 2, 67.50, 'completed');`;
+}
+
+function fallbackCoach({ schema, query, error }) {
+  return {
+    explanation: `Could not analyze your query: "${query}". Error: "${error}". Please check your table names and syntax.`,
+    suggested_fix: `Review if all referenced columns and tables exist in your schema.`,
+    hints: [
+      "Refer to your schema for correct table/column names.",
+      "Consult SQL syntax documentation if needed."
+    ]
+  };
 }
 
 export default {
@@ -39,187 +46,204 @@ export default {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      "Access-Control-Max-Age": "86400"
     };
 
-    // Handle CORS preflight
     if (request.method === "OPTIONS") {
-      return new Response(null, {
-        headers: {
-          ...corsHeaders,
-          "Access-Control-Max-Age": "86400",
-        }
-      });
+      return new Response(null, { headers: corsHeaders });
     }
 
     const url = new URL(request.url);
 
-    // Handle API endpoint
+    // Endpoint: /generate-schema
     if (request.method === "POST" && url.pathname === "/generate-schema") {
+      let data;
       try {
-        console.log("Processing generate-schema request");
-        
-        // request body
-        let data;
-        try {
-          data = await request.json();
-        } catch (e) {
-          console.error("Failed to parse request body:", e);
-          return new Response(JSON.stringify({ error: "Invalid JSON" }), {
-            status: 400,
-            headers: {
-              "Content-Type": "application/json",
-              ...corsHeaders
-            }
-          });
-        }
-        
-        const { prompt } = data;
-        
-        if (!prompt) {
-          return new Response(JSON.stringify({ error: "Prompt is required" }), {
-            status: 400,
-            headers: {
-              "Content-Type": "application/json",
-              ...corsHeaders
-            }
-          });
-        }
+        data = await request.json();
+      } catch (e) {
+        return new Response(JSON.stringify({ error: "Invalid JSON" }), {
+          status: 400,
+          headers: { "Content-Type": "application/json", ...corsHeaders }
+        });
+      }
+      const { prompt } = data;
+      if (!prompt) {
+        return new Response(JSON.stringify({ error: "Prompt is required" }), {
+          status: 400,
+          headers: { "Content-Type": "application/json", ...corsHeaders }
+        });
+      }
 
-        // Check if Claude API key is available
-        if (!env["claude-sql-api-2"]) {
-          console.error("Claude API key not found in environment variables");
-          return new Response(JSON.stringify({ 
-            error: "Claude API key not configured",
-            database: generateFallbackSchema(prompt),
-            source: 'fallback'
-          }), {
-            status: 200,
-            headers: {
-              "Content-Type": "application/json",
-              ...corsHeaders
-            }
-          });
-        }
-
-        // Debug: Log that we have an API key 
-        console.log("Claude API key found, attempting API call...");
-
-        // Call Claude API with updated model and better error handling
-        try {
-          console.log("Calling Claude API...");
-          
-          const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-api-key': env["claude-sql-api-2"],  
-              'anthropic-version': '2023-06-01'
-            },
-            body: JSON.stringify({
-              model: 'claude-3-5-sonnet-20241022',  
-              max_tokens: 5000,  
-              messages: [{
-                role: 'user',
-                content: `Generate a complete SQL database based on this description: "${prompt}". 
-          
-          Please include:
-          1. CREATE TABLE statements with appropriate data types (use SQLite syntax - INTEGER, TEXT, REAL, BLOB)
-          2. Primary keys using INTEGER PRIMARY KEY AUTOINCREMENT
-          3. Foreign keys and constraints where appropriate
-          4. Sample INSERT statements with realistic data (MINIMUM 20 rows per table - this is required!)
-          5. Comments explaining the database design
-          
-          IMPORTANT: Each table MUST have at least 20 rows of sample data. This is critical for meaningful SQL practice.
-          Use varied, realistic data that represents different scenarios and edge cases.
-          
-          Make sure the database is production-ready with proper normalization and relationships. 
-          Format the output as clean, executable SQLite SQL that can be run in sql.js.
-          Use SQLite-compatible syntax only.`
-              }]
-            })
-          });
-          
-          console.log("Claude API response status:", claudeResponse.status);
-          
-          if (!claudeResponse.ok) {
-            const errorText = await claudeResponse.text();
-            console.error("Claude API error details:", {
-              status: claudeResponse.status,
-              statusText: claudeResponse.statusText,
-              body: errorText
-            });
-            
-            let errorMessage;
-            switch (claudeResponse.status) {
-              case 401:
-                errorMessage = "Authentication failed - API key may be invalid";
-                break;
-              case 429:
-                errorMessage = "Rate limit exceeded - please try again later";
-                break;
-              case 500:
-                errorMessage = "Claude API service error";
-                break;
-              default:
-                errorMessage = `API error (${claudeResponse.status}): ${errorText}`;
-            }
-            
-            throw new Error(errorMessage);
-          }
-          
-          const claudeData = await claudeResponse.json();
-          console.log("Claude API response received successfully");
-          
-          // Check if response has expected structure
-          if (!claudeData.content || !claudeData.content[0] || !claudeData.content[0].text) {
-            console.error("Unexpected Claude API response structure:", claudeData);
-            throw new Error("Invalid response structure from Claude API");
-          }
-          
-          const generatedDatabase = claudeData.content[0].text;
-
-          return new Response(JSON.stringify({ 
-            database: generatedDatabase,
-            source: 'claude-api'
-          }), {
-            headers: {
-              "Content-Type": "application/json",
-              ...corsHeaders
-            }
-          });
-
-        } catch (apiError) {
-          console.error("Claude API call failed:", apiError);
-          
-          // Return fallback database if API fails
-          return new Response(JSON.stringify({ 
-            database: generateFallbackSchema(prompt),
-            source: 'fallback',
-            error: `API call failed: ${apiError.message}`
-          }), {
-            status: 200,
-            headers: {
-              "Content-Type": "application/json",
-              ...corsHeaders
-            }
-          });
-        }
-        
-      } catch (error) {
-        console.error("Error handling request:", error);
-        return new Response(JSON.stringify({ 
-          error: error.message,
-          database: generateFallbackSchema("default"),
+      if (!env["claude-sql-api-2"]) {
+        return new Response(JSON.stringify({
+          error: "Claude API key not configured",
+          database: generateFallbackSchema(prompt),
           source: 'fallback'
         }), {
-          status: 500,
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders }
+        });
+      }
+
+      const schemaPrompt = `Generate a complete SQL database based on this description: "${prompt}".
+Please include:
+1. CREATE TABLE statements with appropriate data types (use SQLite syntax - INTEGER, TEXT, REAL, BLOB)
+2. Primary keys using INTEGER PRIMARY KEY AUTOINCREMENT
+3. Foreign keys and constraints where appropriate
+4. Sample INSERT statements with realistic data (MINIMUM 20 rows per table - this is required!)
+5. Comments explaining the database design
+IMPORTANT: Each table MUST have at least 20 rows of sample data. This is critical for meaningful SQL practice.
+Use varied, realistic data that represents different scenarios and edge cases.
+Make sure the database is production-ready with proper normalization and relationships.
+Format output as clean, executable SQLite SQL compatible with sql.js.`;
+
+      try {
+        const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
           headers: {
-            "Content-Type": "application/json",
-            ...corsHeaders
-          }
+            'Content-Type': 'application/json',
+            'x-api-key': env["claude-sql-api-2"],
+            'anthropic-version': '2023-06-01'
+          },
+          body: JSON.stringify({
+            model: 'claude-3-5-sonnet-20241022',
+            max_tokens: 5000,
+            messages: [{ role: 'user', content: schemaPrompt }]
+          })
+        });
+
+        if (!claudeResponse.ok) {
+          throw new Error(`Claude API error: ${claudeResponse.status}`);
+        }
+        const claudeData = await claudeResponse.json();
+
+        if (!claudeData.content || !claudeData.content[0] || !claudeData.content[0].text) {
+          throw new Error("Invalid response structure from Claude API");
+        }
+        const generatedDatabase = claudeData.content[0].text;
+
+        return new Response(JSON.stringify({
+          database: generatedDatabase,
+          source: 'claude-api'
+        }), {
+          headers: { "Content-Type": "application/json", ...corsHeaders }
+        });
+      } catch (apiError) {
+        return new Response(JSON.stringify({
+          database: generateFallbackSchema(prompt),
+          source: 'fallback',
+          error: `API call failed: ${apiError.message}`
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders }
         });
       }
     }
+
+    // Endpoint: /explain-sql-error
+    if (request.method === "POST" && url.pathname === "/explain-sql-error") {
+      let data;
+      try {
+        data = await request.json();
+      } catch (e) {
+        return new Response(JSON.stringify({ error: "Invalid JSON" }), {
+          status: 400,
+          headers: { "Content-Type": "application/json", ...corsHeaders }
+        });
+      }
+      const { schema, query, error } = data;
+      if (!schema || !query || !error) {
+        return new Response(JSON.stringify({ error: "Missing required fields: schema, query, error" }), {
+          status: 400,
+          headers: { "Content-Type": "application/json", ...corsHeaders }
+        });
+      }
+
+      if (!env["claude-sql-api-2"]) {
+        return new Response(JSON.stringify({
+          error: "Claude API key not configured",
+          coaching: fallbackCoach({ schema, query, error }),
+          source: 'fallback'
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders }
+        });
+      }
+
+      const coachPrompt = `You are an expert SQL tutor.
+Given:
+1. The database schema:
+${schema}
+2. The user's SQL query:
+${query}
+3. The error message:
+${error}
+Please:
+- Explain the root cause in plain English.
+- Suggest specific fixes and/or beginner-friendly hints.
+Format your answer as JSON with fields:
+{
+  "explanation": "...",
+  "suggested_fix": "...",
+  "hints": ["...", "..."]
+}`;
+
+      try {
+        const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': env["claude-sql-api-2"],
+            'anthropic-version': '2023-06-01'
+          },
+          body: JSON.stringify({
+            model: 'claude-3-5-sonnet-20241022',
+            max_tokens: 1500,
+            messages: [{ role: 'user', content: coachPrompt }]
+          })
+        });
+
+        if (!claudeResponse.ok) {
+          throw new Error(`Claude API error: ${claudeResponse.status}`);
+        }
+        const claudeData = await claudeResponse.json();
+
+        const rawResponse = claudeData.content[0]?.text || "";
+
+        let coaching;
+        try {
+          if (rawResponse.trim().startsWith("{")) {
+            coaching = JSON.parse(rawResponse);
+          } else {
+            coaching = {
+              explanation: rawResponse,
+              suggested_fix: "",
+              hints: []
+            };
+          }
+        } catch (parseError) {
+          coaching = {
+            explanation: rawResponse,
+            suggested_fix: "",
+            hints: []
+          };
+        }
+
+        return new Response(JSON.stringify({ coaching, source: 'claude-api' }), {
+          headers: { "Content-Type": "application/json", ...corsHeaders }
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({
+          error: err.message,
+          coaching: fallbackCoach({ schema, query, error }),
+          source: 'fallback'
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders }
+        });
+      }
+    }
+
 
     // Serve index.html for root path
     if (url.pathname === "/" || url.pathname === "") {
@@ -721,7 +745,6 @@ SELECT * FROM customers LIMIT 5;</textarea>
     } catch (coachingError) {
       addDebugInfo('Error getting coaching response: ' + coachingError.message);
       console.error('Coaching error:', coachingError);
-      updateStatus('Query execution failed - coaching service unavailable');
     }
   }
 

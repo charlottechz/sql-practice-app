@@ -191,6 +191,31 @@ function generateSQLSchema(prompt) {
   });
 }
 
+function coachSqlError(schema, query, errorMessage) {
+  fetch('https://sql-coaching-layer.charlotteachaze.workers.dev/explain-sql-error', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ schema, query, error: errorMessage })
+  })
+  .then(response => response.json())
+  .then(data => {
+    const coaching = data.coaching;
+    // Display coaching info in the UI
+    showCoachingPanel(coaching.explanation, coaching.suggested_fix, coaching.hints);
+  })
+  .catch(err => {
+    showCoachingPanel("Could not connect to coaching service.", "", []);
+  });
+}
+
+function showCoachingPanel(explanation, fix, hints) {
+  // Update your UI with explanation, fix, and hints (implement this to fit your panel)
+  document.getElementById('coachingPanel').innerHTML =
+    `<h4>Explanation</h4><p>${explanation}</p>
+     <h4>Suggested Fix</h4><p>${fix}</p>
+     <h4>Hints</h4><ul>${hints.map(hint => `<li>${hint}</li>`).join('')}</ul>`;
+}
+
 // Generate mock SQL schema based on prompt context
 function generateMockSQLSchema(prompt) {
   const lowerPrompt = prompt.toLowerCase();
