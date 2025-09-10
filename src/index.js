@@ -455,14 +455,15 @@ Format your answer as JSON with fields:
             <i class="fas fa-circle"></i>
             <span>Database: Initializing...</span>
           </div>
-          /*
+          <!-- Debug button hidden -->
+          <!--
           <button id="showDebugBtn" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-md transition-colors text-sm">
             <i class="fas fa-bug"></i> Debug
           </button>
+          -->
           <button id="toggleSchema" class="lg:hidden bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-md transition-colors">
             <i class="fas fa-bars"></i>
           </button>
-          */
         </div>
       </div>
     </div>
@@ -527,7 +528,8 @@ Format your answer as JSON with fields:
 
       <!-- Main Content -->
       <div class="lg:col-span-3 space-y-6">
-        <!-- Debug Panel -->
+        <!-- Debug Panel HIDDEN -->
+        <!--
         <div id="debugPanel" class="debug-panel bg-yellow-50 border border-yellow-200 rounded-lg overflow-hidden">
           <div class="p-4">
             <div class="flex items-start justify-between mb-2">
@@ -544,6 +546,7 @@ Format your answer as JSON with fields:
             </div>
           </div>
         </div>
+        -->
 
         <!-- SQL Query Editor -->
         <div class="bg-white rounded-lg shadow-sm border border-gray-200">
@@ -574,44 +577,6 @@ SELECT * FROM customers LIMIT 5;</textarea>
                 <i class="fas fa-trash"></i>
                 <span>Clear</span>
               </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Query Results Panel -->
-        <div id="resultsPanel" class="results-panel bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <div class="p-4 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-pink-50">
-            <div class="flex items-center justify-between">
-              <h3 class="font-semibold text-gray-900 flex items-center">
-                <i class="fas fa-chart-bar text-purple-600 mr-2"></i>
-                Query Results
-              </h3>
-              <div class="flex items-center space-x-4 text-sm text-gray-600">
-                <span id="rowCount">0 rows</span>
-                <span id="queryTime">0ms</span>
-                <button id="hideResultsBtn" class="text-gray-500 hover:text-gray-700">
-                  <i class="fas fa-times"></i>
-                </button>
-              </div>
-            </div>
-          </div>
-          <div class="p-4">
-            <div class="table-container">
-              <table id="resultsTable" class="min-w-full divide-y divide-gray-200 text-sm">
-                <thead class="bg-gray-50">
-                  <tr id="resultsHeader">
-                    <!-- Headers will be populated dynamically -->
-                  </tr>
-                </thead>
-                <tbody id="resultsBody" class="bg-white divide-y divide-gray-200">
-                  <!-- Results will be populated dynamically -->
-                </tbody>
-              </table>
-              <div id="emptyResults" class="text-center py-8 text-gray-500" style="display: none;">
-                <i class="fas fa-inbox text-3xl mb-2"></i>
-                <p>No results to display</p>
-                <p class="text-sm text-gray-400">Query executed successfully but returned no rows</p>
-              </div>
             </div>
           </div>
         </div>
@@ -650,6 +615,44 @@ SELECT * FROM customers LIMIT 5;</textarea>
             </div>
             <div id="coachingContent" class="text-sm">
               <!-- Coaching content will be inserted here -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Query Results Panel -->
+        <div id="resultsPanel" class="results-panel bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          <div class="p-4 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-pink-50">
+            <div class="flex items-center justify-between">
+              <h3 class="font-semibold text-gray-900 flex items-center">
+                <i class="fas fa-chart-bar text-purple-600 mr-2"></i>
+                Query Results
+              </h3>
+              <div class="flex items-center space-x-4 text-sm text-gray-600">
+                <span id="rowCount">0 rows</span>
+                <span id="queryTime">0ms</span>
+                <button id="hideResultsBtn" class="text-gray-500 hover:text-gray-700">
+                  <i class="fas fa-times"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="p-4">
+            <div class="table-container">
+              <table id="resultsTable" class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
+                  <tr id="resultsHeader">
+                    <!-- Headers will be populated dynamically -->
+                  </tr>
+                </thead>
+                <tbody id="resultsBody" class="bg-white divide-y divide-gray-200">
+                  <!-- Results will be populated dynamically -->
+                </tbody>
+              </table>
+              <div id="emptyResults" class="text-center py-8 text-gray-500" style="display: none;">
+                <i class="fas fa-inbox text-3xl mb-2"></i>
+                <p>No results to display</p>
+                <p class="text-sm text-gray-400">Query executed successfully but returned no rows</p>
+              </div>
             </div>
           </div>
         </div>
