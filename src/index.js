@@ -289,7 +289,7 @@ Format your answer as JSON with fields:
       word-wrap: break-word;
     }
     .schema-display .sql-keyword {
-      color: #1e40af;
+      color: #625dec; 
       font-weight: bold;
     }
     .schema-display .sql-comment {
@@ -297,7 +297,7 @@ Format your answer as JSON with fields:
       font-style: italic;
     }
     .schema-display .sql-string {
-      color: #059669;
+      color: #78bf4d;
     }
     .table-container {
       max-height: 400px;
@@ -382,7 +382,7 @@ Format your answer as JSON with fields:
       color: #991b1b;
     }
     .table-info {
-      background: #f0f9ff;
+      background: #dfdffb;
       border: 1px solid #0ea5e9;
       border-radius: 0.375rem;
       padding: 0.75rem;
