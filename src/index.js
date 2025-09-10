@@ -455,12 +455,14 @@ Format your answer as JSON with fields:
             <i class="fas fa-circle"></i>
             <span>Database: Initializing...</span>
           </div>
+          /*
           <button id="showDebugBtn" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-md transition-colors text-sm">
             <i class="fas fa-bug"></i> Debug
           </button>
           <button id="toggleSchema" class="lg:hidden bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-md transition-colors">
             <i class="fas fa-bars"></i>
           </button>
+          */
         </div>
       </div>
     </div>
