@@ -40,8 +40,104 @@ function fallbackCoach({ schema, query, error }) {
   };
 }
 
+function generateFallbackCoaching(errorMessage, query) {
+  const lowerError = errorMessage.toLowerCase();
+  const lowerQuery = query.toLowerCase();
+
+  if (lowerQuery.includes('where') && lowerError.includes('syntax error')) {
+  // Try to match missing '=' or missing quotes
+  const match = query.match(/where\s+(\w+)\s+(\w+)/i);
+  if (match) {
+    const col = match[1], val = match[2];
+    // Guess the fix: add '=' and single quotes
+    const fixed = query.replace(
+      new RegExp(`where\\s+${col}\\s+${val}`, 'i'),
+      `WHERE ${col} = '${val}'`
+    );
+    return {
+      explanation: "Your WHERE clause seems to be missing an '=' sign and quotes around the value.",
+      suggestedFix: fixed,
+      tips: [
+        "To compare in SQL, use '=' (e.g., WHERE name = 'John').",
+        "Always wrap string values in single quotes."
+      ]
+    };
+  }
+}
+
+  // Common SQL error patterns and responses
+  if (lowerError.includes('no such table')) {
+    const tableMatch = errorMessage.match(/no such table: (\w+)/i);
+    const tableName = tableMatch ? tableMatch[1] : 'unknown';
+    
+    return {
+      explanation: `It looks like you're trying to query a table called "${tableName}" that doesn't exist in your database. This usually happens when there's a typo in the table name or the table hasn't been created yet.`,
+      suggestedFix: `-- First, check what tables are available:\nSELECT name FROM sqlite_master WHERE type='table';\n\n-- Then correct your query with the right table name`,
+      tips: [
+        "Use 'SELECT name FROM sqlite_master WHERE type=\"table\"' to see all available tables",
+        "Check for typos in your table name",
+        "Table names are case-sensitive in some databases"
+      ]
+    };
+  }
+  
+  if (lowerError.includes('no such column')) {
+    const columnMatch = errorMessage.match(/no such column: (\w+)/i);
+    const columnName = columnMatch ? columnMatch[1] : 'unknown';
+    
+    return {
+      explanation: `The column "${columnName}" doesn't exist in the table you're querying. This might be due to a typo or the column might have a different name.`,
+      suggestedFix: `-- Check the table structure first:\nPRAGMA table_info(your_table_name);\n\n-- Then use the correct column name in your query`,
+      tips: [
+        "Use 'PRAGMA table_info(table_name)' to see all columns in a table",
+        "Double-check column name spelling",
+        "Column names are case-sensitive in some databases"
+      ]
+    };
+  }
+  
+  if (lowerError.includes('syntax error')) {
+    return {
+      explanation: `There's a syntax error in your SQL query. This means the structure of your SQL doesn't follow the correct format that the database expects.`,
+      suggestedFix: null,
+      tips: [
+        "Check for missing commas between column names",
+        "Make sure you have matching parentheses",
+        "Verify that keywords like SELECT, FROM, WHERE are spelled correctly",
+        "Check if you're missing semicolons or have extra ones"
+      ]
+    };
+  }
+  
+  if (lowerError.includes('near') && lowerError.includes(':')) {
+    return {
+      explanation: `There's a syntax error near a specific part of your query. The database parser encountered something unexpected and couldn't continue processing your SQL.`,
+      suggestedFix: null,
+      tips: [
+        "Look carefully at the text mentioned in the error message",
+        "Check for typos in SQL keywords",
+        "Make sure you're using the right punctuation (commas, parentheses, quotes)",
+        "Verify that your WHERE clause conditions are properly formatted"
+      ]
+    };
+  }
+  
+  // Generic fallback
+  return {
+    explanation: `Your SQL query encountered an error. While I can't provide specific guidance right now, this is a normal part of learning SQL! Most errors are caused by small syntax issues or typos.`,
+    suggestedFix: null,
+    tips: [
+      "Check your spelling of table and column names",
+      "Make sure you're using proper SQL syntax",
+      "Look for missing commas, parentheses, or quotes",
+      "Try breaking down complex queries into smaller parts"
+    ]
+  };
+}
+
 export default {
   async fetch(request, env, ctx) {
+    
     const corsHeaders = {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
@@ -214,20 +310,17 @@ Format your answer as JSON with fields:
         try {
           if (rawResponse.trim().startsWith("{")) {
             coaching = JSON.parse(rawResponse);
+            // Map legacy keys to canonical ones (optional)
+            if (coaching.suggested_fix && !coaching.suggestedFix) {
+              coaching.suggestedFix = coaching.suggested_fix;
+            }
           } else {
-            coaching = {
-              explanation: rawResponse,
-              suggested_fix: "",
-              hints: []
-            };
+            coaching = { explanation: rawResponse, suggestedFix: "", hints: [] };
           }
         } catch (parseError) {
-          coaching = {
-            explanation: rawResponse,
-            suggested_fix: "",
-            hints: []
-          };
+          coaching = { explanation: rawResponse, suggestedFix: "", hints: [] };
         }
+        coaching.source = 'claude-api';
 
         return new Response(JSON.stringify({ coaching, source: 'claude-api' }), {
           headers: { "Content-Type": "application/json", ...corsHeaders }
@@ -244,6 +337,200 @@ Format your answer as JSON with fields:
       }
     }
 
+    // Endpoint: /api/coaching-response
+    if (request.method === "POST" && url.pathname === "/api/coaching-response") {
+      try {
+        console.log("Processing coaching-response request");
+        
+        let errorDetails;
+        try {
+          errorDetails = await request.json();
+        } catch (e) {
+          console.error("Failed to parse coaching request body:", e);
+          return new Response(JSON.stringify({ error: "Invalid JSON" }), {
+            status: 400,
+            headers: {
+              "Content-Type": "application/json",
+              ...corsHeaders
+            }
+          });
+        }
+
+        const { query, errorMessage, errorType, schema, location, queryAnalysis } = errorDetails;
+        
+        if (!query || !errorMessage) {
+          return new Response(JSON.stringify({ error: "Query and errorMessage are required" }), {
+            status: 400,
+            headers: {
+              "Content-Type": "application/json",
+              ...corsHeaders
+            }
+          });
+        }
+
+        // Check if Claude API key is available
+        if (!env["claude-sql-api-2"]) {
+          console.error("Claude API key not found for coaching");
+          return new Response(JSON.stringify({ 
+            explanation: "I'm sorry, but the coaching service is currently unavailable. Please check your SQL syntax and try again.",
+            tips: ["Check for typos in table and column names", "Make sure you're using proper SQL syntax", "Verify that all referenced tables exist in your database"],
+            source: 'fallback'
+          }), {
+            status: 200,
+            headers: {
+              "Content-Type": "application/json",
+              ...corsHeaders
+            }
+          });
+        }
+
+        // Build coaching prompt for Claude
+        let prompt = `You are a helpful SQL tutor helping a beginner understand their SQL error. Please provide a clear, encouraging explanation.
+
+**Student's Query:**
+\`\`\`sql
+${query}
+\`\`\`
+
+**Error Message:**
+${errorMessage}
+
+**Error Type:** ${errorType || 'SQL Error'}`;
+
+        // Add schema context if available
+        if (schema && Object.keys(schema).length > 0) {
+          prompt += `\n\n**Available Database Schema:**\n`;
+          for (const [tableName, columns] of Object.entries(schema)) {
+            prompt += `Table: ${tableName}\n`;
+            columns.forEach(col => {
+              prompt += `  - ${col.name} (${col.type})${col.primaryKey ? ' PRIMARY KEY' : ''}${col.notNull ? ' NOT NULL' : ''}\n`;
+            });
+            prompt += '\n';
+          }
+        }
+
+        // Add location context if available
+        if (location && (location.line || location.column || location.context)) {
+          prompt += `\n**Error Location:**\n`;
+          if (location.line) prompt += `Line: ${location.line}\n`;
+          if (location.column) prompt += `Column: ${location.column}\n`;
+          if (location.context) prompt += `Context: "${location.context}"\n`;
+        }
+
+        // Add query analysis if available
+        if (queryAnalysis) {
+          prompt += `\n**Query Analysis:**\n`;
+          prompt += `Lines: ${queryAnalysis.totalLines}, Characters: ${queryAnalysis.totalCharacters}\n`;
+          if (queryAnalysis.keywords.length > 0) {
+            prompt += `Keywords found: ${queryAnalysis.keywords.join(', ')}\n`;
+          }
+          if (queryAnalysis.tables.length > 0) {
+            prompt += `Tables referenced: ${queryAnalysis.tables.join(', ')}\n`;
+          }
+        }
+
+        prompt += `\n\nPlease provide:
+1. A clear, beginner-friendly explanation of what went wrong
+2. A corrected version of the SQL query (if possible)
+3. 2-3 helpful tips for avoiding this error in the future
+
+Be encouraging and educational. Focus on helping them learn, not just fixing the immediate problem.
+
+Format your response as a JSON object with these fields:
+- explanation: string (main explanation)
+- suggestedFix: string (corrected SQL query, or null if not applicable)
+- tips: array of strings (helpful tips)
+
+Respond with ONLY the JSON object, no additional text.`;
+
+        try {
+          console.log("Calling Claude API for coaching...");
+          
+          const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': env["claude-sql-api-2"],
+              'anthropic-version': '2023-06-01'
+            },
+            body: JSON.stringify({
+              model: 'claude-3-5-sonnet-20241022',
+              max_tokens: 2000,
+              messages: [{
+                role: 'user',
+                content: prompt
+              }]
+            })
+          });
+
+          if (!claudeResponse.ok) {
+            throw new Error(`Claude API error: ${claudeResponse.status}`);
+          }
+
+          const claudeData = await claudeResponse.json();
+          console.log("Claude coaching response received");
+
+          if (!claudeData.content || !claudeData.content[0] || !claudeData.content[0].text) {
+            throw new Error("Invalid response structure from Claude API");
+          }
+
+          // Try to parse Claude's JSON response
+          let coachingResponse;
+          try {
+            coachingResponse = JSON.parse(claudeData.content[0].text);
+          } catch (parseError) {
+            // Fallback if Claude doesn't return valid JSON
+            coachingResponse = {
+              explanation: claudeData.content[0].text,
+              suggestedFix: null,
+              tips: ["Double-check your SQL syntax", "Verify table and column names", "Make sure all referenced tables exist"]
+            };
+          }
+
+          // Add source info
+          coachingResponse.source = 'claude-api';
+
+          return new Response(JSON.stringify(coachingResponse), {
+            headers: {
+              "Content-Type": "application/json",
+              ...corsHeaders
+            }
+          });
+
+        } catch (apiError) {
+          console.error("Claude coaching API failed:", apiError);
+          
+          // Return intelligent fallback based on error type
+          const fallbackResponse = generateFallbackCoaching(errorMessage, query);
+          
+          return new Response(JSON.stringify({
+            ...fallbackResponse,
+            source: 'fallback',
+            error: `Coaching API unavailable: ${apiError.message}`
+          }), {
+            status: 200,
+            headers: {
+              "Content-Type": "application/json",
+              ...corsHeaders
+            }
+          });
+        }
+
+      } catch (error) {
+        console.error("Error in coaching endpoint:", error);
+        return new Response(JSON.stringify({ 
+          explanation: "I'm sorry, I encountered an error while trying to help with your SQL query. Please try again or check your syntax manually.",
+          tips: ["Check for typos in your query", "Verify table and column names", "Make sure you're using proper SQL syntax"],
+          source: 'error'
+        }), {
+          status: 500,
+          headers: {
+            "Content-Type": "application/json",
+            ...corsHeaders
+          }
+        });
+      }
+    }
 
     // Serve index.html for root path
     if (url.pathname === "/" || url.pathname === "") {
@@ -319,6 +606,29 @@ Format your answer as JSON with fields:
     .debug-panel.show {
       max-height: 300px;
     }
+      .coachingPanel {
+  max-width: 100%;
+  width: 100%;
+  min-height: 60px;
+  max-height: 40vh; /* Responsive for desktop */
+  overflow-y: auto;
+  background: #f9fafc;
+  border: 1px solid #d6dae5;
+  border-radius: 6px;
+  padding: 16px;
+  margin-top: 16px;
+  word-break: break-word;
+  font-size: 1rem;
+  box-sizing: border-box;
+}
+@media (max-width: 600px) {
+  .coachingPanel {
+    max-height: 60vh; /* Taller on mobile */
+    font-size: 0.96rem;
+    padding: 8px;
+  }
+}
+
     .results-panel {
       transition: all 0.3s ease;
       max-height: 0;
@@ -635,19 +945,45 @@ SELECT * FROM customers LIMIT 5;</textarea>
         </div>
 
         <!-- Coaching Panel -->
-        <div id="coachingPanel" class="error-panel bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg overflow-hidden">
+        <div id="coachingPanel" class="coaching-panel bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg shadow-lg mt-6 mb-4 max-w-3xl mx-auto transition-all">
           <div class="p-4">
-            <div class="flex items-start justify-between mb-3">
-              <div class="flex items-center space-x-2">
-                <i class="fas fa-graduation-cap text-blue-600"></i>
-                <h4 class="font-medium text-blue-800">SQL Coaching Assistant</h4>
+            <div class="flex items-center justify-between mb-4">
+              <div class="flex items-center space-x-3">
+                <i class="fas fa-graduation-cap text-blue-600 text-xl"></i>
+                <h4 class="font-bold text-blue-800 text-xl tracking-tight">SQL Coaching Assistant</h4>
               </div>
-              <button id="dismissCoaching" class="text-blue-600 hover:text-blue-800">
-                <i class="fas fa-times"></i>
+              <button id="dismissCoaching" class="text-blue-600 hover:text-blue-800 rounded-full px-2 py-1" title="Close">
+                <i class="fas fa-times text-lg"></i>
               </button>
             </div>
-            <div id="coachingContent" class="text-sm">
-              <!-- Coaching content will be inserted here -->
+            
+            <div id="coachingContent" class="space-y-6">
+              <!-- Coaching content will be dynamically inserted here -->
+              <!-- Example of a single error block (your JS will loop through and render multiples for batch errors): -->
+              <!--
+              <div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-y-3">
+                  <span class="text-xs font-semibold text-indigo-400 uppercase tracking-wide">Query 1</span>
+                  <span class="text-red-600 font-semibold">Error: no such table: customers</span>
+                </div>
+                <div class="mt-2 text-sm text-gray-800">
+                  <strong>Explanation:</strong>
+                  <span>It looks like you are trying to query a table that doesn't exist. Please check your spelling.</span>
+                </div>
+                <div class="mt-2">
+                  <strong class="text-green-700">Suggested Fix:</strong>
+                  <pre class="bg-green-50 border border-green-100 rounded p-2 text-sm text-green-800 whitespace-pre-line">SELECT name FROM sqlite_master WHERE type='table';</pre>
+                  <button class="copy-fix-btn mt-1 px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-xs">Copy Fix</button>
+                </div>
+                <div class="mt-2">
+                  <strong class="text-yellow-800">Tips:</strong>
+                  <ul class="list-disc pl-5 text-yellow-700 text-sm space-y-1">
+                    <li>Use the database overview panel to see available tables.</li>
+                    <li>Check for typos in your table names.</li>
+                  </ul>
+                </div>
+              </div>
+              -->
             </div>
           </div>
         </div>
@@ -2081,27 +2417,27 @@ async function generateDatabase() {
 // Update the copy database function to use consistent quotes
 document.getElementById('copyDatabaseBtn').addEventListener('click', async function() {
     if (currentDatabase) {
-        try {
-            await navigator.clipboard.writeText(currentDatabase);
-            updateStatus('Database copied to clipboard');
-            addDebugInfo('Database copied to clipboard successfully');
-        } catch (err) {
-            // Fallback for browsers that don't support clipboard API
-            const textArea = document.createElement('textarea');
-            textArea.value = currentDatabase;
-            document.body.appendChild(textArea);
-            textArea.select();
-            try {
-                document.execCommand('copy');
-                updateStatus('Database copied to clipboard');
-                addDebugInfo('Database copied to clipboard (fallback method)');
-            } catch (fallbackErr) {
-                showError('Failed to copy to clipboard');
-            }
-            document.body.removeChild(textArea);
-        }
+      try {
+          await navigator.clipboard.writeText(currentDatabase);
+          updateStatus('Database copied to clipboard');
+          addDebugInfo('Database copied to clipboard successfully');
+      } catch (err) {
+          // Fallback for browsers that don't support clipboard API
+          const textArea = document.createElement('textarea');
+          textArea.value = currentDatabase;
+          document.body.appendChild(textArea);
+          textArea.select();
+          try {
+              document.execCommand('copy');
+              updateStatus('Database copied to clipboard');
+              addDebugInfo('Database copied to clipboard (fallback method)');
+          } catch (fallbackErr) {
+              showError('Failed to copy to clipboard');
+          }
+          document.body.removeChild(textArea);
+      }
     } else {
-        showError('No database available to copy');
+      showError('No database available to copy');
     }
 });
 
@@ -2117,11 +2453,11 @@ function showLoading(message) {
     
     // Hide progress bar for simple loading
     if (progressContainer) {
-        progressContainer.style.display = 'none';
+      progressContainer.style.display = 'none';
     }
     
     if (loadingPopup) {
-        loadingPopup.classList.add('show');
+      loadingPopup.classList.add('show');
     }
 }
 
@@ -2307,10 +2643,10 @@ SELECT * FROM \${tableName} LIMIT 20;\`;
             addDebugInfo("Executing statement " + (i+1) + "/" + statements.length + ": " + stmt.substring(0, 50) + "...");
             db.run(stmt);
             successCount++;
-            addDebugInfo("✓ Statement " + (i+1) + " executed successfully");
+            addDebugInfo("âœ“ Statement " + (i+1) + " executed successfully");
           } catch (error) {
             errorCount++;
-            addDebugInfo("✗ Error executing statement " + (i+1) + ": " + error.message);
+            addDebugInfo("âœ— Error executing statement " + (i+1) + ": " + error.message);
             addDebugInfo("Failed statement: " + stmt);
             console.error("SQL execution error for statement " + (i+1) + ":", error);
           }
@@ -2334,9 +2670,9 @@ SELECT * FROM \${tableName} LIMIT 20;\`;
           try {
             const testResult = db.exec("SELECT COUNT(*) as count FROM " + tableName);
             const rowCount = testResult[0].values[0][0];
-            addDebugInfo("    ✓ Table " + tableName + " is queryable with " + rowCount + " rows");
+            addDebugInfo("    âœ“ Table " + tableName + " is queryable with " + rowCount + " rows");
           } catch (testError) {
-            addDebugInfo("    ✗ Table " + tableName + " query test failed: " + testError.message);
+            addDebugInfo("    âœ— Table " + tableName + " query test failed: " + testError.message);
           }
         });
         

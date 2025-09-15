@@ -190,6 +190,57 @@ function generateSQLSchema(prompt) {
     showNotification('Using mock data (API unavailable)', 'error');
   });
 }
+function showCoachingPanelBatch(coachingBatch) {
+  let html = '<div class="multi-coaching-panel">';
+  coachingBatch.forEach((coach, idx) => {
+    html += `
+      <div class="coaching-panel" style="margin-bottom:2rem;">
+        <div class="coaching-section">
+          <strong>Query ${idx + 1}:</strong>
+          <pre>${coach.query}</pre>
+        </div>
+        <div class="coaching-section">
+          <strong>Error:</strong> ${coach.error}
+        </div>
+        <div class="coaching-section">
+          <strong>Explanation:</strong> ${coach.explanation}
+        </div>
+        ${coach.suggested_fix && coach.suggested_fix.trim()
+          ? `<div class="coaching-section"><strong>Suggested Fix:</strong>
+            <pre>${coach.suggested_fix}</pre>
+            <button class="copy-fix-btn" data-fix="${encodeURIComponent(coach.suggested_fix)}">Copy Fix</button>
+          </div>`
+          : ''
+        }
+        ${Array.isArray(coach.hints) && coach.hints.length > 0
+          ? `<div class="coaching-section"><strong>Tips:</strong><ul>
+              ${coach.hints.map(tip => `<li>${tip}</li>`).join('')}
+            </ul></div>`
+          : ''
+        }
+      </div>`;
+  });
+  html += '</div>';
+  document.getElementById('coachingContent').innerHTML = html;
+
+  // Add copy button functionality
+  document.querySelectorAll('.copy-fix-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      navigator.clipboard.writeText(decodeURIComponent(btn.getAttribute('data-fix')));
+      btn.textContent = "Copied!";
+      btn.disabled = true;
+      setTimeout(() => {
+        btn.textContent = "Copy Fix";
+        btn.disabled = false;
+      }, 1200);
+    });
+  });
+
+  // Ensure panel is visible
+  const coachingPanel = document.getElementById('coachingPanel');
+  if (coachingPanel) coachingPanel.classList.add('show');
+}
+
 
 function coachSqlError(schema, query, errorMessage) {
   fetch('https://sql-coaching-layer.charlotteachaze.workers.dev/explain-sql-error', {
@@ -200,21 +251,63 @@ function coachSqlError(schema, query, errorMessage) {
   .then(response => response.json())
   .then(data => {
     const coaching = data.coaching;
-    // Display coaching info in the UI
-    showCoachingPanel(coaching.explanation, coaching.suggested_fix, coaching.hints);
+    // Use either key
+    const suggestedFix = coaching.suggestedFix || coaching.suggested_fix || "";
+// In coachSqlError or where you process the response:
+    // When receiving coaching response:
+if (Array.isArray(response.coachingBatch)) {
+  showCoachingPanelBatch(response.coachingBatch);
+} else if (response.coaching) {
+  showCoachingPanel(
+    response.coaching.explanation,
+    response.coaching.suggested_fix || response.coaching.suggestedFix,
+    response.coaching.hints
+  );
+}
+
   })
   .catch(err => {
     showCoachingPanel("Could not connect to coaching service.", "", []);
   });
 }
 
-function showCoachingPanel(explanation, fix, hints) {
-  // Update your UI with explanation, fix, and hints (implement this to fit your panel)
-  document.getElementById('coachingPanel').innerHTML =
-    `<h4>Explanation</h4><p>${explanation}</p>
-     <h4>Suggested Fix</h4><p>${fix}</p>
-     <h4>Hints</h4><ul>${hints.map(hint => `<li>${hint}</li>`).join('')}</ul>`;
+
+function showCoachingPanel(explanation, suggestedFix, hints) {
+  let html = `<div class="coaching-panel">`;
+
+  // Always show the error explanation, clearly labeled
+  html += `<div class="coaching-section"><strong>Error Explanation:</strong><div>${explanation || "No explanation provided."}</div></div>`;
+
+  // Show Suggested Fix only if one is present AND not empty
+  if (suggestedFix && suggestedFix.trim()) {
+    html += `<div class="coaching-section"><strong>Suggested Fix:</strong>
+      <pre class="coaching-sql">${suggestedFix}</pre>
+      <button onclick="copySuggestedFix()">Copy Fix</button>
+    </div>`;
+  }
+
+  // Show Tips only if at least one tip; label and list
+  if (Array.isArray(hints) && hints.length > 0) {
+    html += `<div class="coaching-section"><strong>Tips to Avoid This Error:</strong><ul>`;
+    hints.forEach(tip => {
+      html += `<li>${tip}</li>`;
+    });
+    html += `</ul></div>`;
+  }
+
+  html += `</div>`;
+  document.getElementById('coachingPanel').innerHTML = html;
 }
+
+// Utility to copy suggested fix
+function copySuggestedFix() {
+  const fixEl = document.querySelector('.coaching-sql');
+  if (fixEl) {
+    navigator.clipboard.writeText(fixEl.textContent);
+    alert('Suggested SQL fix copied!');
+  }
+}
+
 
 // Generate mock SQL schema based on prompt context
 function generateMockSQLSchema(prompt) {

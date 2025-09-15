@@ -1,5 +1,10 @@
-name = "sql-practice-app-worker"
-account_id = "c3e7498da4f9546226aaf367603918ac"
-workers_dev = true
-compatibility_date = "2025-05-20"
+name = "sql-practice-app"
 main = "src/index.js"
+compatibility_date = "2023-05-18"
+
+[env.production]
+name = "sql-practice-app-worker"
+
+# Environment variables for your Claude API key
+[env.production.vars]
+ENVIRONMENT = "production"
