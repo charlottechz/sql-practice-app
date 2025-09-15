@@ -1009,7 +1009,7 @@ SELECT * FROM customers LIMIT 5;</textarea>
     <footer class="bg-white border-t border-gray-200 mt-12">
       <div class="max-w-7xl mx-auto px-4 py-6">
         <div class="text-center text-sm text-gray-500">
-          <p>Built by <a href="https://himanshiiportfolio.netlify.app/" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 hover:underline transition-colors">Himanshi Sheth</a></p>
+          <p>Built by <a href="https://himanshiiportfolio.netlify.app/" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 hover:underline transition-colors">Himanshi Sheth</a> for Break Into Tech</p>
           <p class="mt-1">AI SQL Playground - Generate custom databases and practice SQL queries</p>
         </div>
       </div>
