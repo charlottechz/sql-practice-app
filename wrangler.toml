@@ -1,4 +1,4 @@
-name = "sql-practice-app"
+name = "sql-practice-app-worker"
 main = "src/index.js"
 compatibility_date = "2023-05-18"
 
