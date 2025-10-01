@@ -765,9 +765,10 @@ Respond with ONLY the JSON object, no additional text.`;
             <i class="fas fa-circle"></i>
             <span>Database: Initializing...</span>
           </div>
-          <button id="showDebugBtn" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-md transition-colors text-sm">
-            <i class="fas fa-bug"></i> Debug
-          </button>
+          // Hide the debug button
+         // <button id="showDebugBtn" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-md transition-colors text-sm">
+         //   <i class="fas fa-bug"></i> Debug
+         // </button>
           <button id="toggleSchema" class="lg:hidden bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-md transition-colors">
             <i class="fas fa-bars"></i>
           </button>
